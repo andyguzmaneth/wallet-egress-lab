@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Safe{Wallet} Egress Inventory</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-0: #f6f5f2; --surface-1: #fcfcfb; --border: #e3e2dd; --grid: #ebeae6;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7a7974;
+  --t0: #c4c3bd; --t1: #86b6ef; --t2: #2a78d6; --t3: #104281;
+  --band-a: #f1f0ec; --band-b: #fcfcfb;
+  --h1: #e6effb; --h2: #b7d3f6; --h3: #6da7ec; --h4: #2a78d6; --h5: #104281;
+  --h-ink-dark: #ffffff;
+  --accent: #2a78d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-0: #121211; --surface-1: #1a1a19; --border: #2e2e2c; --grid: #262624;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --t0: #4a4a46; --t1: #1c5cab; --t2: #3987e5; --t3: #9ec5f4;
+    --band-a: #202020; --band-b: #1a1a19;
+    --h1: #1d2a3a; --h2: #184f95; --h3: #256abf; --h4: #3987e5; --h5: #9ec5f4;
+    --accent: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #121211; --surface-1: #1a1a19; --border: #2e2e2c; --grid: #262624;
+  --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+  --t0: #4a4a46; --t1: #1c5cab; --t2: #3987e5; --t3: #9ec5f4;
+  --band-a: #202020; --band-b: #1a1a19;
+  --h1: #1d2a3a; --h2: #184f95; --h3: #256abf; --h4: #3987e5; --h5: #9ec5f4;
+  --accent: #3987e5;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface-0); color: var(--text-primary);
+  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1080px; margin: 0 auto; padding: 32px 16px 64px; }
+header .kicker { color: var(--text-muted); font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
+h1 { font-size: 30px; line-height: 1.2; margin: 6px 0 8px; letter-spacing: -.01em; }
+h2 { font-size: 19px; margin: 0 0 6px; }
+.lede { color: var(--text-secondary); max-width: 760px; margin: 0; }
+section { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-top: 18px; }
+section > p { color: var(--text-secondary); max-width: 820px; }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 22px; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.tile .v { font-size: 30px; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.tile .l { color: var(--text-secondary); font-size: 13px; line-height: 1.4; }
+.split { display: flex; gap: 2px; border-radius: 6px; overflow: hidden; margin: 12px 0 6px; font-size: 13px; }
+.seg { padding: 8px; color: #fff; min-width: 92px; } .seg .sub { color: inherit; opacity: .85; }
+.seg.ink-dark { color: #0b0b0b; } .seg.t2, .seg.t3 { color: #fff; }
+:root[data-theme="dark"] .seg.t3, :root[data-theme="dark"] .seg.t2 { color: #0b0b0b; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .seg.t3 { color: #0b0b0b; } :root:not([data-theme="light"]) .seg.ink-dark { color: #fff; } }
+:root[data-theme="dark"] .seg.ink-dark { color: #fff; }
+.mix { display: flex; gap: 2px; width: 110px; height: 8px; border-radius: 3px; overflow: hidden; margin-top: 5px; }
+.mix i { display: block; height: 100%; }
+#inv td.tech { min-width: 160px; } #inv td:nth-child(2) { min-width: 150px; }
+.tag { display: inline-block; font-size: 11px; border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; margin: 0 3px 3px 0; color: var(--text-secondary); white-space: nowrap; }
+#inv:not(.all) tr.extra { display: none; }
+.more { margin-top: 10px; font: inherit; font-size: 13px; border: 1px solid var(--border); background: var(--surface-0); color: var(--text-secondary); border-radius: 8px; padding: 5px 12px; cursor: pointer; }
+.mini td:first-child { white-space: nowrap; }
+.findings { margin: 0; padding-left: 20px; }
+.findings li { margin: 8px 0; color: var(--text-primary); }
+.findings li span { color: var(--text-secondary); }
+svg { width: 100%; height: auto; display: block; }
+.scroll svg { min-width: 760px; }
+svg text { fill: var(--text-secondary); font: 12px ui-sans-serif, system-ui, sans-serif; }
+svg .axis { fill: var(--text-muted); font-size: 11px; }
+svg .steplbl { fill: var(--text-muted); font-size: 10px; }
+svg .lane { stroke: var(--grid); stroke-width: 1; }
+svg .band.b0 { fill: var(--band-a); } svg .band.b1 { fill: var(--band-b); }
+.t0 { fill: var(--t0); background: var(--t0); } .t1 { fill: var(--t1); background: var(--t1); }
+.t2 { fill: var(--t2); background: var(--t2); } .t3 { fill: var(--t3); background: var(--t3); }
+svg rect[data-tip] { cursor: default; }
+svg rect[data-tip]:hover { stroke: var(--text-primary); stroke-width: 1; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--text-secondary); margin: 6px 0 10px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.tierhelp { list-style: none; padding: 0; margin: 8px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; font-size: 13px; color: var(--text-secondary); }
+.tierhelp b { color: var(--text-primary); font-weight: 600; }
+.stepkey { columns: 3; font-size: 12px; color: var(--text-muted); margin: 8px 0 0; padding-left: 20px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+thead th { color: var(--text-muted); font-weight: 600; font-size: 12px; position: sticky; top: 0; background: var(--surface-1); }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:after { content: " ↕"; color: var(--text-muted); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sub { color: var(--text-muted); font-size: 11.5px; margin-top: 2px; word-break: break-word; }
+.heat { color: var(--text-primary); }
+.h0 { color: var(--text-muted); } .h1 { background: var(--h1); } .h2 { background: var(--h2); }
+.h3 { background: var(--h3); color: #fff; } .h4 { background: var(--h4); color: #fff; } .h5 { background: var(--h5); color: #fff; }
+:root[data-theme="dark"] .h5 { color: #0b0b0b; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .h5 { color: #0b0b0b; } }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.chips button { font: inherit; font-size: 12px; border: 1px solid var(--border); background: var(--surface-0); color: var(--text-secondary); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--text-primary); }
+.recs { counter-reset: r; list-style: none; padding: 0; margin: 0; }
+.recs li { counter-increment: r; display: grid; grid-template-columns: 28px 1fr; gap: 4px 10px; padding: 10px 0; border-bottom: 1px solid var(--grid); }
+.recs li:before { content: counter(r); font-weight: 650; color: var(--accent); }
+.recs .what { font-weight: 600; }
+.recs .why { grid-column: 2; color: var(--text-secondary); font-size: 14px; }
+.mini { max-width: 680px; }
+code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.tip { position: fixed; pointer-events: none; background: var(--text-primary); color: var(--surface-1); font-size: 12px; padding: 6px 8px; border-radius: 6px; max-width: 420px; z-index: 9; display: none; }
+.theme { position: absolute; top: 16px; right: 16px; font: inherit; font-size: 12px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
+@media (max-width: 760px) {
+  .tiles { grid-template-columns: 1fr 1fr; }
+  .tierhelp { grid-template-columns: 1fr; }
+  .stepkey { columns: 1; }
+  h1 { font-size: 24px; }
+}
+@media print { .theme, .chips { display: none; } section { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<button class="theme" type="button" id="theme">Theme</button>
+<main>
+<header>
+  <div class="kicker">Wallet egress inventory · Safe{Wallet} web · Sepolia · run {{RUN}}</div>
+  <h1>Every request Safe{Wallet} made in a {{DUR}}-minute session, and what each one reveals</h1>
+  <p class="lede">A scripted user created a 2-of-2 Safe, received ETH and WETH, sent ETH through the multisig flow, swapped through the CoW widget, sat idle, and switched to a custom RPC. A proxy recorded every request the page made, with full headers and bodies. Each request is classified by who receives it and what it carries. Cookie banner choice: {{COOKIES}}.</p>
+</header>
+
+<div class="tiles">
+  <div class="tile"><div class="v">{{N}}</div><div class="l">requests in {{DUR}} min, plus {{NPRE}} CORS preflights. {{IDLERPM}} per minute while idle on the home page.</div></div>
+  <div class="tile"><div class="v">{{SENS}}</div><div class="l">requests ({{SENSPCT}}) carry an address or reveal a pending action.</div></div>
+  <div class="tile"><div class="v">{{BACKEND}}</div><div class="l">of those go to the Safe backend API. {{RPC}} go to Safe's RPC.</div></div>
+  <div class="tile"><div class="v">{{NTHIRDADDR}}</div><div class="l">third parties receive an address: {{THIRDADDR}}.</div></div>
+</div>
+
+<section>
+  <h2>Findings</h2>
+  {{FINDINGS}}
+</section>
+
+<section>
+  <h2>Where address-linked requests go</h2>
+  <p>Hiding the IP address on the RPC path covers only the RPC share. The rest goes to the Safe backend and to third parties, which see the same IP address and the same Safe address.</p>
+  <div class="split">
+    <div class="seg t3" style="flex:{{FB}}"><b>Safe backend API</b> {{BACKEND}}<div class="sub">{{NBACKEND}} requests</div></div>
+    <div class="seg t2" style="flex:{{FR}}"><b>Safe RPC</b> {{RPC}}<div class="sub">{{NRPC}}</div></div>
+    <div class="seg t1 ink-dark" style="flex:{{FS}}"><b>Safe web app</b> {{SAFEOTHER}}<div class="sub">{{NSAFEOTHER}}</div></div>
+    <div class="seg t0 ink-dark" style="flex:{{FT}}"><b>Third parties</b> {{THIRD}}<div class="sub">{{NTHIRD}}</div></div>
+    <div class="seg t0 ink-dark" style="flex:{{FC}}; opacity:.6"><b>Custom RPC</b> {{CUSTOMPCT}}<div class="sub">{{NCUSTOM}}</div></div>
+  </div>
+  <p class="sub">Widths are proportional. "Safe web app" counts page loads whose URL holds <code>?safe=</code>. "Custom RPC" is the node the user set in step 15.</p>
+</section>
+
+<section>
+  <h2>Who learns what</h2>
+  <p>Requests per operator that carry each identifier. Every request also carries the IP address. A cell is the count of requests in the session; a dot means none.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Receiver</th><th class=num>All requests</th><th class=num>Safe address</th><th class=num>Owner address</th><th class=num>Counterparty</th><th class=num>Tx hash / order id</th><th class=num>Client ID</th><th class=num>Intent</th></tr></thead>
+    <tbody>{{MATRIX}}</tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>The session, request by request</h2>
+  {{LEGEND}}
+  <div class="scroll">{{TIMELINE}}</div>
+  <ol class="stepkey">{{STEPKEY}}</ol>
+</section>
+
+<section>
+  <h2>Requests per user action</h2>
+  {{LEGEND}}
+  <div class="scroll">{{STEPS}}</div>
+  <ul class="tierhelp">{{TIERHELP}}</ul>
+</section>
+
+<section>
+  <h2>Endpoint inventory</h2>
+  <p>One row per operator and service. Latency is the time from request start to the last response byte, measured at the proxy. Click a header to sort.</p>
+  <div class="chips" id="chips">
+    <button type="button" aria-pressed="true" data-t="all">All</button>
+    <button type="button" aria-pressed="false" data-t="3">Intent</button>
+    <button type="button" aria-pressed="false" data-t="2">Address-linked</button>
+    <button type="button" aria-pressed="false" data-t="1">Telemetry</button>
+    <button type="button" aria-pressed="false" data-t="0">Address-free</button>
+  </div>
+  <div class="scroll"><table id="inv">
+    <thead><tr><th class=sortable>Operator</th><th class=sortable>Service</th><th class="num sortable">Requests</th><th class=sortable>Tier</th><th>Identifiers</th><th class="num sortable">p50 ms</th><th class="num sortable">Up</th><th>Technique</th></tr></thead>
+    <tbody>{{INV}}</tbody>
+  </table></div>
+  <button class="more" type="button" id="more">Show all rows</button>
+</section>
+
+<section>
+  <h2>Latency cost of hiding the origin</h2>
+  <p>For each user action, the table takes the address-linked requests in the first {{WINDOW}} s after the action, counts each endpoint once (repeated polls of the same endpoint are dropped), and finds the longest chain of them that run one after another. Parallel requests share one added delay; sequential requests add up. The estimate multiplies the chain length by the added latency per request: {{TOR}} s for Tor (p50 measured from an Arti client), {{OHTTP}} ms for one Oblivious HTTP relay hop (assumed). It is an upper bound for interactive steps, because some sequential requests do not depend on each other.</p>
+  <div class="scroll"><table class="mini">
+    <thead><tr><th>Action</th><th class=num>Distinct address-linked requests</th><th class=num>Sequential chain</th><th class=num>All over Tor</th><th class=num>Backend via OHTTP, RPC via Tor</th></tr></thead>
+    <tbody>{{PROJ}}</tbody>
+  </table></div>
+  <p>{{CUSTOM}}</p>
+</section>
+
+<section>
+  <h2>Recommendations</h2>
+  {{RECS}}
+</section>
+
+{{MAINNET}}
+
+<section>
+  <h2>Method and limits</h2>
+  <p>Chromium (Playwright, headed under Xvfb, fresh profile, QUIC off) ran behind mitmproxy with a trusted CA, so every HTTP request and WebSocket message from the page, its iframes and its service worker was recorded with bodies. The signer was an injected EIP-1193 provider whose keys and RPC stay outside the browser, so the capture holds only traffic that Safe{Wallet} and its embedded widgets make. A baseline run with a blank page identified the browser's own Google traffic, which is excluded. Identifiers were found by searching URLs, headers and bodies for values the harness knows: the Safe address, both owners, the counterparty, safeTxHash and CoW order ids, and analytics client IDs.{{FAILS}}</p>
+  <p>Latency references: direct RPC about 90 ms p50; Tor through an Arti client {{TOR}} s p50 and 7.3 s p95; tor-js in the browser {{TORJS}} s p50 per call after a 26 to 30 s bootstrap; a PIR balance lookup {{PIR}} s p50 over clearnet with about 760 KB uploaded per lookup. The OHTTP figure is an assumption for one extra relay hop, not a measurement.</p>
+  <p>Limits: one session per plan on one day; Sepolia hides some mainnet features, so a read-only mainnet pass on a public Safe was added; the mobile app and browser extensions were out of scope; the tier is a lower bound for requests whose bodies are compressed or binary.</p>
+</section>
+<footer>Generated by wallet-egress-lab from run {{RUN}}.</footer>
+</main>
+<div class="tip" id="tip"></div>
+<script>
+(function () {
+  var root = document.documentElement, btn = document.getElementById("theme");
+  try { var saved = localStorage.getItem("theme"); if (saved) root.setAttribute("data-theme", saved); } catch (e) {}
+  btn.addEventListener("click", function () {
+    var dark = root.getAttribute("data-theme") ? root.getAttribute("data-theme") === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    var next = dark ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("theme", next); } catch (e) {}
+  });
+  var tip = document.getElementById("tip");
+  document.addEventListener("mousemove", function (e) {
+    var t = e.target.closest && e.target.closest("[data-tip]");
+    if (!t) { tip.style.display = "none"; return; }
+    tip.textContent = t.getAttribute("data-tip");
+    tip.style.display = "block";
+    var x = Math.min(e.clientX + 12, innerWidth - tip.offsetWidth - 8);
+    tip.style.left = x + "px"; tip.style.top = (e.clientY + 14) + "px";
+  });
+  var table = document.getElementById("inv");
+  table.querySelectorAll("th.sortable").forEach(function (th, idx) {
+    var asc = false;
+    th.addEventListener("click", function () {
+      asc = !asc;
+      var rows = Array.prototype.slice.call(table.tBodies[0].rows);
+      rows.sort(function (a, b) {
+        var ca = a.cells[idx], cb = b.cells[idx];
+        var va = ca.dataset.v !== undefined ? parseFloat(ca.dataset.v) : ca.textContent;
+        var vb = cb.dataset.v !== undefined ? parseFloat(cb.dataset.v) : cb.textContent;
+        return (va > vb ? 1 : va < vb ? -1 : 0) * (asc ? 1 : -1);
+      });
+      rows.forEach(function (r) { table.tBodies[0].appendChild(r); });
+    });
+  });
+  document.getElementById("more").addEventListener("click", function () {
+    var on = table.classList.toggle("all");
+    this.textContent = on ? "Show fewer rows" : "Show all rows";
+  });
+  document.getElementById("chips").addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    this.querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
+    var t = b.dataset.t; if (t !== "all") table.classList.add("all");
+    Array.prototype.forEach.call(table.tBodies[0].rows, function (r) { r.style.display = t === "all" || r.dataset.tier === t ? "" : "none"; });
+  });
+})();
+</script>
+</body>
+</html>

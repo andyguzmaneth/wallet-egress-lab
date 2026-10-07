@@ -1,0 +1,420 @@
+"""Render one self-contained HTML report from analysed runs.
+
+Usage: python3 -I analysis/report.py --sepolia <run> [--mainnet <run>] --out report.html
+"""
+import argparse
+import html
+import json
+import statistics
+from collections import Counter, defaultdict
+from pathlib import Path
+
+TIER_NAMES = ["Address-free", "Telemetry & fingerprint", "Address-linked read", "Intent before chain"]
+TIER_HELP = [
+    "Carries no address or client ID. The server still sees the IP address and timing.",
+    "Analytics, error reports, feature flags, bot checks. Carries a client or device ID but no address.",
+    "Carries the Safe address or an owner address. The server links that address to the IP address.",
+    "Shows what the user is about to do (recipient, amount, calldata, quote, signature) before it is on chain.",
+]
+ID_SHORT = {"Safe address": "Safe", "Owner address": "Owner", "Counterparty": "Counterparty", "Tx hash / order id": "Tx id", "Persistent client ID": "Client ID"}
+ID_COLS = ["Safe address", "Owner address", "Counterparty", "Tx hash / order id", "Persistent client ID"]
+OPERATOR_ORDER = ["Safe", "CoW Protocol", "Google Analytics", "WalletConnect (Reown)", "Sentry", "LaunchDarkly",
+                  "Cloudflare", "Custom RPC (user-set)"]
+
+# Assumed added latency per sequential request, in seconds. Sources are in the Method section.
+TOR = 1.5          # Arti/Tor p50 for an RPC call (pir-wallet-bench, kass-tor run, 2026-10-06)
+TORJS = 2.0        # tor-js in the browser, p50 per call (anon-RPC bench)
+PIR = 1.75         # PIR balance lookup p50 over clearnet (pir-wallet-bench clean1)
+OHTTP = 0.12       # one extra relay hop (assumption, see Method)
+WINDOW = 15        # seconds after an action used for the latency projection
+
+TECH = {
+    "static": ("Plain path; self-host third-party assets", 0.0),
+    "telemetry": ("Do not send without consent; strip addresses", 0.0),
+    "challenge": ("Needs the IP by design; check server-side or use privacy-pass tokens", 0.0),
+    "backend_read": ("Hide origin: OHTTP relay (or Tor) in front of the API", OHTTP),
+    "rpc_read": ("anon-RPC for origin; PIR for balance, nonce, code", TOR),
+    "rpc_public": ("Plain path, or the same anonymous path", 0.0),
+    "rpc_name": ("User's RPC or anon-RPC; cache; PIR name index later", TOR),
+    "rpc_sanctions": ("Check a local copy of the public list", 0.0),
+    "intent": ("Hide origin only (OHTTP / Tor); simulate locally where possible", OHTTP),
+}
+CAT_TECH = {
+    "App code & assets": "static", "Config & metadata": "static", "Account state": "backend_read",
+    "Targeted messaging": "backend_read", "Security screening (Zodiac)": "backend_read",
+    "Tx preview & simulation": "intent", "Tx security scan": "intent", "Tx proposal & signatures": "intent",
+    "RPC: chain status": "rpc_public", "RPC: gas & fees": "rpc_public", "RPC: account & contract reads": "rpc_read",
+    "RPC: tx tracking": "rpc_read", "RPC: name resolution (ENS)": "rpc_name", "RPC: sanctions screening": "rpc_sanctions",
+    "RPC: broadcast": "intent", "Swap: order history (12 chains x 2 envs)": "backend_read",
+    "Swap: balance watcher": "backend_read", "Swap: prices & token search": "rpc_public", "Swap: quote": "intent",
+    "Swap: order submit & tracking": "intent", "Swap: notifications": "backend_read", "Analytics": "telemetry",
+    "Error reporting": "telemetry", "Feature flags": "telemetry", "Bot challenge": "challenge", "IP geolocation": "challenge",
+}
+STEP_LABELS = {
+    "cold_load": "Open app (first visit)", "connect_wallet": "Connect signer", "create_safe": "Create Safe (2-of-2)",
+    "idle_empty": "Idle, empty Safe (60 s)", "receive_eth": "Receive ETH", "receive_token": "Receive WETH",
+    "view_assets": "View assets", "view_history": "View history", "send_propose_A": "Send: owner A proposes",
+    "send_confirm_execute_B": "Send: owner B confirms + executes", "swap_quote": "Swap: get quote",
+    "swap_place_A": "Swap: owner A places order", "swap_execute_B": "Swap: owner B executes",
+    "idle_home": "Idle on home (3 min)", "custom_rpc_set": "Set custom RPC", "custom_rpc_send_review": "Send review, custom RPC",
+    "custom_rpc_idle": "Idle, custom RPC (60 s)", "open_safe_home": "Open public Safe", "view_positions": "View DeFi positions",
+    "view_apps": "Open Safe Apps", "(between steps)": "Between steps",
+}
+IDLE_STEPS = {"idle_empty", "idle_home", "custom_rpc_idle", "receive_eth", "receive_token"}
+
+
+def esc(s) -> str:
+    return html.escape(str(s), quote=True)
+
+
+def pct(a, b) -> str:
+    return f"{(100 * a / b):.0f}%" if b else "0%"
+
+
+def p(vals, q):
+    if not vals:
+        return 0
+    vals = sorted(vals)
+    k = min(len(vals) - 1, max(0, round(q * (len(vals) - 1))))
+    return vals[k]
+
+
+def kb(n) -> str:
+    return f"{n / 1024:.0f} KB" if n < 1024 * 1024 else f"{n / 1048576:.1f} MB"
+
+
+def dep_depth(reqs) -> int:
+    """Longest chain of requests where each starts after the previous one ended."""
+    rs = sorted(reqs, key=lambda r: r["t"])
+    best = []
+    for i, r in enumerate(rs):
+        d = 1
+        for j in range(i):
+            if rs[j]["t"] + rs[j]["ms"] / 1000 <= r["t"]:
+                d = max(d, best[j] + 1)
+        best.append(d)
+    return max(best) if best else 0
+
+
+def op_bucket(o):
+    return o if o in OPERATOR_ORDER else "Other"
+
+
+def svg_timeline(a) -> str:
+    reqs = [r for r in a["requests"] if not r["preflight"]]
+    t0 = a["t0"]
+    tmax = max(r["t"] for r in reqs) - t0
+    lanes = [o for o in OPERATOR_ORDER if any(op_bucket(r["operator"]) == o for r in reqs)] + ["Other"]
+    W, left, lane_h, top = 1000, 150, 22, 34
+    H = top + lane_h * len(lanes) + 26
+    x = lambda t: left + (W - left - 10) * (t / tmax)
+    out = [f'<svg viewBox="0 0 {W} {H}" class="timeline" role="img" aria-label="Every request over the journey, by operator and tier">']
+    for i, w in enumerate(a["windows"]):
+        x0, x1 = x(w["t0"] - t0), x(w["t1"] - t0)
+        out.append(f'<rect x="{x0:.1f}" y="{top - 4}" width="{max(1, x1 - x0):.1f}" height="{lane_h * len(lanes) + 4}" class="band b{i % 2}"><title>{esc(STEP_LABELS.get(w["name"], w["name"]))}</title></rect>')
+        if x1 - x0 > 26:
+            out.append(f'<text x="{(x0 + x1) / 2:.1f}" y="{top - 10}" class="steplbl" text-anchor="middle">{i + 1}</text>')
+    for li, lane in enumerate(lanes):
+        y = top + li * lane_h + lane_h / 2
+        out.append(f'<text x="{left - 8}" y="{y + 4:.1f}" text-anchor="end" class="lanelbl">{esc(lane)}</text>')
+        out.append(f'<line x1="{left}" x2="{W - 10}" y1="{y:.1f}" y2="{y:.1f}" class="lane"/>')
+    for r in sorted(reqs, key=lambda r: r["tier"]):
+        li = lanes.index(op_bucket(r["operator"]))
+        y = top + li * lane_h + lane_h / 2
+        tip = f'{STEP_LABELS.get(r["step"], r["step"])} · {r["host"]}{r["path"]} · {TIER_NAMES[r["tier"]]} · {r["ms"]:.0f} ms'
+        out.append(f'<rect x="{x(r["t"] - t0):.1f}" y="{y - 7:.1f}" width="2" height="14" rx="1" class="t{r["tier"]}" data-tip="{esc(tip)}"/>')
+    for m in range(0, int(tmax / 60) + 1, 5):
+        out.append(f'<text x="{x(m * 60):.1f}" y="{H - 6}" class="axis" text-anchor="middle">{m} min</text>')
+    out.append("</svg>")
+    return "".join(out)
+
+
+def svg_steps(a) -> str:
+    reqs = [r for r in a["requests"] if not r["preflight"]]
+    by = defaultdict(lambda: [0, 0, 0, 0])
+    for r in reqs:
+        by[r["step"]][r["tier"]] += 1
+    order = [w["name"] for w in a["windows"]]
+    mx = max(sum(by[s]) for s in order)
+    W, left, bh, gap = 1000, 250, 16, 8
+    H = len(order) * (bh + gap) + 10
+    out = [f'<svg viewBox="0 0 {W} {H}" class="bars" role="img" aria-label="Requests per step, stacked by tier">']
+    for i, s in enumerate(order):
+        y = 4 + i * (bh + gap)
+        out.append(f'<text x="{left - 10}" y="{y + bh - 4}" text-anchor="end" class="lanelbl">{i + 1}. {esc(STEP_LABELS.get(s, s))}</text>')
+        xx = left
+        for t in range(4):
+            n = by[s][t]
+            if not n:
+                continue
+            w = (W - left - 70) * n / mx
+            out.append(f'<rect x="{xx:.1f}" y="{y}" width="{max(w - 2, 1):.1f}" height="{bh}" rx="3" class="t{t}" data-tip="{esc(STEP_LABELS.get(s, s))}: {n} {esc(TIER_NAMES[t].lower())}"/>')
+            xx += w
+        out.append(f'<text x="{xx + 6:.1f}" y="{y + bh - 4}" class="axis">{sum(by[s])}</text>')
+    out.append("</svg>")
+    return "".join(out)
+
+
+def legend() -> str:
+    return '<div class="legend">' + "".join(
+        f'<span><i class="sw t{t}"></i>{esc(n)}</span>' for t, n in enumerate(TIER_NAMES)) + "</div>"
+
+
+def mixbar(mix):
+    tot = sum(mix) or 1
+    segs = "".join(f'<i class="t{t}" style="flex:{n}" title="{n} {esc(TIER_NAMES[t].lower())}"></i>' for t, n in enumerate(mix) if n)
+    lbl = ", ".join(f"{n} {TIER_NAMES[t].split()[0].lower()}" for t, n in reversed(list(enumerate(mix))) if n)
+    return f'<div class="mix">{segs}</div><div class="sub">{esc(lbl)}</div>'
+
+
+def inventory(a):
+    groups = defaultdict(list)
+    for r in a["requests"]:
+        groups[(r["operator"], r["category"])].append(r)
+    rows = []
+    for (o, c), rs in groups.items():
+        real = [r for r in rs if not r["preflight"]]
+        ids = Counter(i for r in rs for i in r["ids"])
+        tech, delta = TECH[CAT_TECH.get(c, "static")]
+        rows.append({
+            "operator": o, "category": c, "n": len(real), "preflight": len(rs) - len(real),
+            "tier": max(r["tier"] for r in rs), "mix": [sum(1 for r in real if r["tier"] == t) for t in range(4)], "ids": [i for i in ID_COLS if ids[i]],
+            "p50": p([r["ms"] for r in real], .5), "p95": p([r["ms"] for r in real], .95),
+            "up": sum(r["up"] for r in rs), "down": sum(r["down"] for r in rs),
+            "tech": tech, "hosts": sorted({r["host"] for r in rs}),
+            "methods": Counter(m for r in rs for m in r["rpc_methods"]).most_common(3),
+        })
+    rows.sort(key=lambda r: (-(r["mix"][2] + r["mix"][3]), -r["mix"][1], -r["n"]))
+    return rows
+
+
+def matrix(a):
+    ops = defaultdict(lambda: Counter())
+    for r in a["requests"]:
+        if r["preflight"]:
+            continue
+        o = op_bucket(r["operator"]) if r["operator"] != "Safe" else (
+            "Safe backend" if r["host"] in ("safe-client.safe.global", "api.safe.global") else
+            "Safe RPC (eRPC)" if r["host"] == "rpc.safe.global" else "Safe web app & other")
+        ops[o]["_total"] += 1
+        ops[o]["_intent"] += r["tier"] == 3
+        for i in r["ids"]:
+            ops[o][i] += 1
+    order = ["Safe backend", "Safe RPC (eRPC)", "Safe web app & other"] + OPERATOR_ORDER[1:] + ["Other"]
+    return [(o, ops[o]) for o in order if ops[o]["_total"]]
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--sepolia", required=True)
+    ap.add_argument("--mainnet")
+    ap.add_argument("--out", required=True)
+    args = ap.parse_args()
+    a = json.loads((Path(args.sepolia) / "analysis.json").read_text())
+    m = json.loads((Path(args.mainnet) / "analysis.json").read_text()) if args.mainnet else None
+
+    reqs = [r for r in a["requests"] if not r["preflight"]]
+    pre = [r for r in a["requests"] if r["preflight"]]
+    dur_min = (max(r["t"] for r in reqs) - a["t0"]) / 60
+    sens = [r for r in reqs if r["tier"] >= 2]
+    to_backend = sum(1 for r in sens if r["host"] in ("safe-client.safe.global", "api.safe.global"))
+    to_rpc = sum(1 for r in sens if r["host"] == "rpc.safe.global")
+    to_safe_other = sum(1 for r in sens if r["operator"] == "Safe") - to_backend - to_rpc
+    to_custom = sum(1 for r in sens if r["operator"] == "Custom RPC (user-set)")
+    to_third = len(sens) - to_backend - to_rpc - to_safe_other - to_custom
+    third_ops = sorted({r["operator"] for r in reqs if r["operator"] not in ("Safe", "Custom RPC (user-set)")})
+    third_addr = sorted({r["operator"] for r in sens if r["operator"] not in ("Safe", "Custom RPC (user-set)")})
+    idle = [r for r in reqs if r["step"] == "idle_home"]
+    idle_win = next((w for w in a["windows"] if w["name"] == "idle_home"), None)
+    idle_rpm = len(idle) / ((idle_win["t1"] - idle_win["t0"]) / 60) if idle_win else 0
+    ga = [r for r in reqs if r["operator"] == "Google Analytics" and r["category"] == "Analytics"]
+    ga_addr = [r for r in ga if r["tier"] >= 2]
+
+    # Latency projection for interactive steps.
+    proj = []
+    for w in a["windows"]:
+        s = w["name"]
+        if s in IDLE_STEPS:
+            continue
+        seen, rs = set(), []
+        for r in sorted(reqs, key=lambda r: r["t"]):
+            if r["step"] != s or r["tier"] < 2 or r["t"] > w["t0"] + WINDOW:
+                continue
+            key = (r["host"], r["path"], tuple(r["rpc_methods"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            rs.append(r)
+        if not rs:
+            continue
+        backend = [r for r in rs if r["host"] in ("safe-client.safe.global", "api.safe.global") or r["operator"] == "CoW Protocol"]
+        rpc = [r for r in rs if r not in backend]
+        d_all = dep_depth(rs)
+        proj.append({
+            "step": s, "n": len(rs), "depth": d_all,
+            "tor_all": d_all * TOR, "mixed": dep_depth(backend) * OHTTP + dep_depth(rpc) * TOR,
+        })
+
+    inv = inventory(a)
+    mat = matrix(a)
+    mat_max = max((c[i] for _, c in mat for i in ID_COLS), default=1)
+
+    custom_note = ""
+    cr = [r for r in reqs if r["step"].startswith("custom_rpc")]
+    if cr:
+        cr_custom = sum(1 for r in cr if r["operator"] == "Custom RPC (user-set)")
+        cr_saferpc = sum(1 for r in cr if r["host"] == "rpc.safe.global")
+        cr_backend = sum(1 for r in cr if r["host"] == "safe-client.safe.global" and r["tier"] >= 2)
+        cr_saferpc_m = Counter(r["category"] for r in cr if r["host"] == "rpc.safe.global")
+        custom_note = (f"After a custom Sepolia RPC was set, {cr_custom} requests went to the custom node, "
+                       f"{cr_saferpc} still went to Safe's RPC ({', '.join(f'{k.replace("RPC: ", "")} {v}' for k, v in cr_saferpc_m.most_common(3))}), "
+                       f"and {cr_backend} address-linked reads went to the Safe backend. The setting replaces the chain RPC only.")
+
+    mainnet_html = ""
+    if m:
+        mreqs = [r for r in m["requests"] if not r["preflight"]]
+        s_pairs = {(r["operator"], r["category"]) for r in reqs}
+        new = Counter((r["operator"], r["category"]) for r in mreqs if (r["operator"], r["category"]) not in s_pairs)
+        msens = [r for r in mreqs if r["tier"] >= 2]
+        rows = "".join(f"<tr><td>{esc(o)}</td><td>{esc(c)}</td><td class=num>{n}</td></tr>" for (o, c), n in new.most_common(12))
+        mainnet_html = f"""
+<section>
+<h2>What the mainnet pass adds</h2>
+<p>A read-only pass on mainnet watched a public Safe (<code>{esc(m['safe'][:10])}…</code>) with an unfunded signer connected:
+{len(mreqs)} requests, {len(msens)} of them address-linked. These operator and service pairs appeared on mainnet and not in the Sepolia journey:</p>
+<table class="mini"><thead><tr><th>Operator</th><th>Service</th><th class=num>Requests</th></tr></thead><tbody>{rows or '<tr><td colspan=3>None</td></tr>'}</tbody></table>
+</section>"""
+
+    inv_rows = []
+    for r in inv:
+        meth = ", ".join(f"{k} ×{v}" for k, v in r["methods"]) if r["methods"] else ""
+        inv_rows.append(
+            f'<tr data-tier="{r["tier"]}"{" class=extra" if len(inv_rows) >= 14 else ""}><td>{esc(r["operator"])}</td>'
+            f'<td>{esc(r["category"])}<div class="sub">{esc(", ".join(r["hosts"][:2]) + (f" +{len(r['hosts']) - 2}" if len(r["hosts"]) > 2 else ""))}{(" · " + esc(meth)) if meth else ""}</div></td>'
+            f'<td class=num data-v="{r["n"]}">{r["n"]}{f"<div class=sub>+{r["preflight"]} preflight</div>" if r["preflight"] else ""}</td>'
+            f'<td data-v="{r["tier"] * 100000 + r["mix"][r["tier"]]}">{mixbar(r["mix"])}</td>'
+            f'<td>{"".join(f"<span class=tag>{esc(ID_SHORT[i])}</span>" for i in r["ids"]) or "<span class=sub>none</span>"}</td>'
+            f'<td class=num data-v="{r["p50"]}">{r["p50"]:.0f}<div class=sub>p95 {r["p95"]:.0f}</div></td>'
+            f'<td class=num data-v="{r["up"] + r["down"]}">{kb(r["up"])}<div class=sub>{kb(r["down"])} down</div></td>'
+            f'<td class=tech>{esc(r["tech"])}</td></tr>')
+
+    mat_rows = []
+    for o, c in mat:
+        cells = []
+        for i in ID_COLS:
+            v = c[i]
+            lvl = 0 if not v else 1 + min(4, int(5 * v / (mat_max + 1)))
+            cells.append(f'<td class="num heat h{lvl}">{v or "·"}</td>')
+        mat_rows.append(f'<tr><th scope=row>{esc(o)}</th><td class=num>{c["_total"]}</td>{"".join(cells)}<td class="num heat h{0 if not c["_intent"] else 1 + min(4, int(5 * c["_intent"] / (mat_max + 1)))}">{c["_intent"] or "·"}</td></tr>')
+
+    proj_rows = "".join(
+        f'<tr><td>{esc(STEP_LABELS.get(x["step"], x["step"]))}</td><td class=num>{x["n"]}</td>'
+        f'<td class=num>{x["depth"]}</td><td class=num>+{x["tor_all"]:.0f} s</td><td class=num>+{x["mixed"]:.1f} s</td></tr>' for x in proj)
+
+    fails = [s for s in a["steps"] if not s["ok"]]
+    fail_note = (" Steps that did not complete: " + ", ".join(esc(STEP_LABELS.get(s["name"], s["name"])) for s in fails) + ".") if fails else ""
+
+    findings, recs = narrative(a, reqs, sens, idle_win, ga, ga_addr)
+    page = TEMPLATE.replace("{{FINDINGS}}", findings).replace("{{RECS}}", recs)
+    for k, v in {
+        "RUN": esc(a["run"]), "DUR": f"{dur_min:.0f}", "N": str(len(reqs)), "NPRE": str(len(pre)),
+        "OPS": str(len(third_ops)), "OPLIST": esc(", ".join(third_ops)),
+        "SENS": str(len(sens)), "SENSPCT": pct(len(sens), len(reqs)),
+        "BACKEND": pct(to_backend, len(sens)), "RPC": pct(to_rpc, len(sens)), "SAFEOTHER": pct(to_safe_other, len(sens)),
+        "THIRD": pct(to_third, len(sens)), "NBACKEND": str(to_backend), "NRPC": str(to_rpc),
+        "NSAFEOTHER": str(to_safe_other), "NTHIRD": str(to_third), "CUSTOMPCT": pct(to_custom, len(sens)), "NCUSTOM": str(to_custom),
+        "FB": str(to_backend), "FR": str(to_rpc), "FS": str(to_safe_other), "FT": str(to_third), "FC": str(max(to_custom, 0)),
+        "THIRDADDR": esc(", ".join(third_addr) or "none"), "NTHIRDADDR": str(len(third_addr)),
+        "IDLERPM": f"{idle_rpm:.0f}", "GA": str(len(ga)), "GAADDR": str(len(ga_addr)),
+        "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a), "LEGEND": legend(),
+        "INV": "".join(inv_rows), "MATRIX": "".join(mat_rows), "PROJ": proj_rows,
+        "CUSTOM": esc(custom_note), "MAINNET": mainnet_html, "FAILS": fail_note,
+        "COOKIES": "necessary only" if a.get("cookies") == "necessary" else "accept all",
+        "TOR": f"{TOR}", "WINDOW": str(WINDOW), "TORJS": f"{TORJS}", "PIR": f"{PIR}", "OHTTP": f"{OHTTP * 1000:.0f}",
+        "TIERHELP": "".join(f'<li><i class="sw t{t}"></i><b>{esc(TIER_NAMES[t])}.</b> {esc(TIER_HELP[t])}</li>' for t in range(4)),
+        "STEPKEY": "".join(f'<li>{esc(STEP_LABELS.get(w["name"], w["name"]))}</li>' for w in a["windows"]),
+    }.items():
+        page = page.replace("{{" + k + "}}", v)
+    Path(args.out).write_text(page)
+    print("wrote", args.out)
+
+
+def narrative(a, reqs, sens, idle_win, ga, ga_addr):
+    from urllib.parse import parse_qs
+    F, R = [], []
+    by_cat = Counter(r["category"] for r in reqs)
+    n_cat = lambda *cs: sum(by_cat[c] for c in cs)
+    # 1. Analytics with consent declined
+    if ga:
+        F.append(("Google Analytics receives the Safe address and the owner address with analytics declined.",
+                  f"{len(ga)} analytics requests went to Google with consent mode set to denied. {len(ga_addr)} of them carry an address: "
+                  "the event parameter <code>ep.safeAddress</code>, the user property <code>up.walletAddress</code> with the connected signer, "
+                  "and the page URL in <code>dl</code>, which holds <code>?safe=</code>. Declining removes cookies, not the data."))
+        R.append(("Stop analytics requests when consent is declined, and drop addresses from events and page URLs in all cases.",
+                  f"Removes {len(ga_addr)} address-linked requests to a third party. No latency cost."))
+    # 2. Backend polling
+    idle = sorted(r["t"] for r in reqs if r["step"] == "idle_home" and r["category"] == "Account state")
+    if idle_win and len(idle) > 3:
+        gaps = [b - a2 for a2, b in zip(idle, idle[1:]) if b - a2 > 1]
+        per_min = len(idle) / ((idle_win["t1"] - idle_win["t0"]) / 60)
+        F.append(("The Safe backend links the IP address to the Safe address continuously while the app is open.",
+                  f"On an idle home screen the app sent {per_min:.0f} account-state requests per minute (Safe info, balances, queue, history), "
+                  f"about one burst every {statistics.median(gaps) if gaps else 0:.0f} s. Each carries the Safe address in the URL."))
+        R.append(("Put an Oblivious HTTP relay, run by a separate operator, in front of the Safe backend API.",
+                  f"The relay sees the IP address and not the request; the backend sees the request and not the IP address. "
+                  f"Covers the {sum(1 for r in sens if r['host'] in ('safe-client.safe.global', 'api.safe.global'))} backend requests, which are the largest share. "
+                  f"Adds one relay hop per sequential request, estimated at {OHTTP * 1000:.0f} ms. This answers the concern that anon-RPC alone is partial for a backend-heavy wallet."))
+        R.append(("Lower the polling rate and make it conditional.",
+                  "Poll the Safe info endpoint only, fetch balances and history when its tags change, and back off when the tab is hidden. "
+                  "Fewer samples give an observer fewer IP-to-address links and less timing."))
+    # 3. Mainnet RPC lookups on a testnet session
+    ens = [r for r in reqs if r["category"] == "RPC: name resolution (ENS)"]
+    sanc = [r for r in reqs if r["category"] == "RPC: sanctions screening"]
+    if ens or sanc:
+        F.append(("Owner and Safe addresses go to Safe's mainnet RPC during a Sepolia session.",
+                  f"{len(sanc)} requests call the Chainalysis sanctions oracle (<code>isSanctioned</code>) for the Safe and its signers, and "
+                  f"{len(ens)} requests do ENS reverse lookups, both on <code>rpc.safe.global/1</code>. A custom RPC does not change this path."))
+        R.append(("Check sanctions against a local copy of the public list, and resolve names through the user's chosen RPC.",
+                  f"Removes {len(sanc)} sanctions requests outright and moves {len(ens)} name lookups to the path the user picked. Local checks are faster than a round trip."))
+    # 4. Intent before chain
+    scan = [r for r in reqs if r["category"] in ("Tx security scan", "Tx preview & simulation")]
+    prop = [r for r in reqs if r["category"] == "Tx proposal & signatures"]
+    if scan:
+        F.append(("Transaction content reaches the backend before the user signs.",
+                  f"{len(scan)} preview and threat-analysis requests send the full SafeTx (recipient, value, calldata) as typed data, keyed by the Safe address. "
+                  f"{len(prop)} proposal request{"s" if len(prop) != 1 else ""} then send the signature. This content has to reach a server to be useful, so only the origin can be hidden."))
+    # 5. CoW widget fan-out
+    cow = [r for r in reqs if r["operator"] == "CoW Protocol"]
+    hist = [r for r in a["requests"] if r["category"].startswith("Swap: order history")]
+    geo = [r for r in reqs if r["category"] == "IP geolocation"]
+    if cow:
+        hosts = sorted({r["host"] for r in cow})
+        F.append(("Opening Swap sends the Safe address to CoW Protocol for 12 chains on two environments.",
+                  f"The embedded widget made {len(cow)} requests to {len(hosts)} CoW hosts, including {len(hist)} order-history requests and preflights "
+                  "for the Safe address on 12 networks against both <code>api.cow.fi</code> and <code>barn.api.cow.fi</code>. "
+                  f"It also looked up the user's IP address and country at <code>api.country.is</code> ({len(geo)} request), loaded a Cloudflare Turnstile check, "
+                  "and reported to Sentry and LaunchDarkly."))
+        R.append(("Ask the widget to query only the active chain and the production environment, and to geolocate server-side.",
+                  f"Cuts most of the {len(hist)} order-history requests and removes a third party that returns the user's IP address to the page."))
+    # 6. WalletConnect telemetry
+    wc = [r for r in reqs if r["operator"] == "WalletConnect (Reown)" and r["category"] == "Analytics"]
+    if wc:
+        F.append(("The WalletConnect SDK reports to Reown even when WalletConnect is not used.",
+                  f"{len(wc)} requests to <code>pulse.walletconnect.org</code> carry a persistent <code>did:key</code> client ID from the first page load."))
+        R.append(("Initialise the WalletConnect SDK only when the user picks WalletConnect.",
+                  f"Removes {len(wc)} telemetry requests and a persistent client ID from sessions that use an injected wallet."))
+    # 7. Content privacy for RPC reads
+    reads = [r for r in reqs if r["category"] == "RPC: account & contract reads" and r["tier"] >= 2]
+    if reads:
+        R.append(("For RPC reads that carry an address, add anon-RPC for the origin and PIR for balance, nonce and code.",
+                  f"{len(reads)} RPC reads carried an address. Over Tor each sequential read adds about {TOR} s; a PIR balance lookup costs about {PIR} s and "
+                  "760 KB upload, so PIR fits the few reads the wallet needs on open, not polling."))
+    fh = '<ol class="findings">' + "".join(f"<li>{t} <span>{d}</span></li>" for t, d in F) + "</ol>"
+    rh = '<ol class="recs">' + "".join(f'<li><div class="what">{t}</div><div class="why">{d}</div></li>' for t, d in R) + "</ol>"
+    return fh, rh
+
+
+TEMPLATE = (Path(__file__).parent / "template.html").read_text()
+
+if __name__ == "__main__":
+    main()
