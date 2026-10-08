@@ -14,10 +14,10 @@ from pathlib import Path
 
 TIER_NAMES = ["Address-free", "Telemetry & fingerprint", "Address-linked read", "Intent before chain"]
 TIER_HELP = [
-    "No address and no client ID. The receiver learns the IP address, the time, and what was fetched.",
-    "A client, device or session ID, no address. The ID links visits over time, so one later leak of an address exposes the whole history.",
-    "The Safe address or an owner address. The receiver links that address to the IP address.",
-    "What the user is about to do (recipient, amount, calldata, quote, signature), before it is on chain.",
+    "No address or client ID; the receiver still sees the IP address, the time and what was fetched.",
+    "A client or device ID that links visits over time, without an address.",
+    "The Safe address or an owner address, which the receiver links to the IP address.",
+    "What the user is about to do (recipient, amount, calldata, signature) before it is on chain.",
 ]
 CONTEXT_CATS = {"RPC: account & contract reads", "Swap: prices & token search", "RPC: tx tracking", "RPC: name resolution (ENS)"}
 ID_SHORT = {"Safe address": "Safe", "Owner address": "Owner", "Counterparty": "Counterparty", "Tx hash / order id": "Tx id", "Persistent client ID": "Client ID"}
@@ -341,7 +341,6 @@ def main():
         })
 
     tc = Counter(r["tier"] for r in reqs)
-    ctx = sum(1 for r in reqs if r["tier"] == 0 and r["category"] in CONTEXT_CATS)
     inv = inventory(a)
     mat = matrix(a)
     mat_max = max((c[i] for _, c in mat for i in ID_COLS), default=1)
@@ -420,9 +419,8 @@ def main():
         "COOKIES": "necessary only" if a.get("cookies") == "necessary" else "accept all",
         "TOR": f"{TOR}", "WINDOW": str(WINDOW), "TORJS": f"{TORJS}", "PIR": f"{PIR}", "OHTTP": f"{OHTTP * 1000:.0f}",
         "TIERHELP": "".join(
-            f'<li><span><i class="sw t{t}"></i><b>{esc(TIER_NAMES[t])}.</b> {esc(TIER_HELP[t])}'
-            + (f'<span class="note">{ctx} of these show what the user looks at (token prices and search, contract reads, transaction status) without an identifier.</span>' if t == 0 and ctx else "")
-            + f'</span><span class="n">{tc[t]} requests</span></li>' for t in range(4)),
+            f'<li><span><i class="sw t{t}"></i><b>{esc(TIER_NAMES[t])}.</b> {esc(TIER_HELP[t])}</span>'
+            f'<span class="n">{tc[t]} requests</span></li>' for t in range(4)),
         "STEPKEY": "".join(f'<li>{esc(STEP_LABELS.get(w["name"], w["name"]))}</li>' for w in a["windows"]),
     }.items():
         page = page.replace("{{" + k + "}}", v)

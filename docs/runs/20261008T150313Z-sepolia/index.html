@@ -84,11 +84,10 @@ svg rect[data-tip]:hover { stroke: var(--text-primary); stroke-width: 1; }
 .tierhelp li::before { content: counter(tier); font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 12px; }
 .tierhelp .n { font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 12.5px; white-space: nowrap; }
 .tierhelp .note { display: block; margin-top: 3px; font-size: 12.5px; color: var(--text-muted); }
-details.more { margin-top: 10px; }
-details.more > summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--accent); list-style: none; }
-details.more > summary::-webkit-details-marker { display: none; }
-details.more > summary::before { content: "+ "; } details.more[open] > summary::before { content: "\2212  "; }
-details.more > p, details.more > h3 { max-width: 820px; } details.more > p:not(.sub) { color: var(--text-secondary); font-size: 14.5px; }
+.readmore { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; font-weight: 600; }
+.readmore:hover { text-decoration: underline; }
+#method-rest > p { color: var(--text-secondary); max-width: 820px; }
+#method .tierhelp { margin-bottom: 4px; }
 .tierhelp b { color: var(--text-primary); font-weight: 600; }
 .stepkey { columns: 3; font-size: 12px; color: var(--text-muted); margin: 8px 0 0; padding-left: 20px; }
 .scroll { overflow-x: auto; }
@@ -124,7 +123,7 @@ a { color: var(--accent, #2a78d6); }
 .split .seg:focus-visible { outline: 2px solid var(--text-primary); outline-offset: -2px; }
 .split .seg[aria-expanded="true"] { box-shadow: inset 0 -4px 0 var(--text-primary); }
 .hint { margin: 4px 0 0; }
-.bdp { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; max-width: 760px; }
+.bdp { margin-top: 14px; max-width: 760px; }
 .bdp[hidden] { display: none; }
 .bdp h4 { margin: 0 0 4px; font-size: 13.5px; display: flex; align-items: center; gap: 6px; }
 .bdp table { font-size: 13px; width: 100%; } .bdp td { padding: 4px 6px 4px 0; vertical-align: top; } .bdp code { font-size: 11.5px; word-break: break-all; }
@@ -186,17 +185,12 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 
 <section id="method">
   <h2>How we did it</h2>
-  <p>A script played one user through 17 actions on Sepolia: create a 2-of-2 Safe, receive ETH and WETH, send ETH through the multisig flow (owner A proposes, owner B confirms and executes), swap WETH for COW in the CoW widget, sit idle on the home page, and switch to a custom RPC. A second, read-only pass opened a public Safe on mainnet. A recording proxy captured every request, and each request got a privacy tier.</p>
-  <details class="more">
-    <summary>More: capture method, tiers, limits</summary>
-    <p>Chromium (Playwright, headed under Xvfb, fresh profile, QUIC off) ran behind mitmproxy with a trusted CA, so every HTTP request and WebSocket message from the page, its iframes and its service worker was recorded with headers and bodies. The signer was an injected EIP-1193 provider whose keys and RPC stay outside the browser, so the capture holds only traffic that Safe{Wallet} and its embedded widgets make. A baseline run with a blank page identified the browser's own Google traffic, which is excluded. Identifiers were found by searching URLs, headers and bodies for values the harness knows: the Safe address, both owners, the counterparty, safeTxHash and CoW order ids, and analytics client IDs. Cookie banner choice: necessary only.</p>
-    <h3>Tiers, from least to most sensitive</h3>
-    <p>Each request gets the highest tier whose rule it matches, so every request has exactly one tier. Every request also carries the IP address.</p>
-    <ol class="tierhelp"><li><span><i class="sw t0"></i><b>Address-free.</b> No address and no client ID. The receiver learns the IP address, the time, and what was fetched.<span class="note">60 of these show what the user looks at (token prices and search, contract reads, transaction status) without an identifier.</span></span><span class="n">1143 requests</span></li><li><span><i class="sw t1"></i><b>Telemetry &amp; fingerprint.</b> A client, device or session ID, no address. The ID links visits over time, so one later leak of an address exposes the whole history.</span><span class="n">53 requests</span></li><li><span><i class="sw t2"></i><b>Address-linked read.</b> The Safe address or an owner address. The receiver links that address to the IP address.</span><span class="n">798 requests</span></li><li><span><i class="sw t3"></i><b>Intent before chain.</b> What the user is about to do (recipient, amount, calldata, quote, signature), before it is on chain.</span><span class="n">62 requests</span></li></ol>
-    <p class="sub">Two things the tiers do not capture. First, requests on the same connection, or close in time to an address-linked request, can be linked to that address by the receiver. Second, address-free requests can still show what the user looks at; see the note under tier 1.</p>
-    <h3>Limits</h3>
-    <p>One session per plan, on one day. The mobile app and browser extensions were out of scope. The tier is a lower bound for requests whose bodies are compressed or binary.</p>
-  </details>
+  <p>A script played one user through 17 actions on Sepolia: create a 2-of-2 Safe, receive ETH and WETH, send ETH through the multisig flow, swap WETH for COW in the CoW widget, sit idle, and switch to a custom RPC. A second, read-only pass opened a public Safe on mainnet. A recording proxy captured every request, and each request got a privacy tier<span class="rm-end" hidden>.</span><span class="rm-dots">…</span> <button type="button" class="readmore" aria-expanded="false" aria-controls="method-rest">more</button></p>
+  <div id="method-rest" hidden>
+    <p>Chromium (Playwright, fresh profile, QUIC off) ran behind mitmproxy with a trusted CA, so every request from the page, its iframes and its service worker was recorded with headers and bodies. The signer was an injected EIP-1193 provider whose keys and RPC stay outside the browser, so the capture holds only traffic that Safe{Wallet} and its embedded widgets make. A blank-page baseline run identified the browser's own traffic, which is excluded. Identifiers were found by searching URLs, headers and bodies for the Safe address, the owners, the counterparty, safeTxHash, CoW order ids and analytics client IDs. Each request gets the highest tier whose rule it matches, from least to most sensitive:</p>
+    <ol class="tierhelp"><li><span><i class="sw t0"></i><b>Address-free.</b> No address or client ID; the receiver still sees the IP address, the time and what was fetched.</span><span class="n">1143 requests</span></li><li><span><i class="sw t1"></i><b>Telemetry &amp; fingerprint.</b> A client or device ID that links visits over time, without an address.</span><span class="n">53 requests</span></li><li><span><i class="sw t2"></i><b>Address-linked read.</b> The Safe address or an owner address, which the receiver links to the IP address.</span><span class="n">798 requests</span></li><li><span><i class="sw t3"></i><b>Intent before chain.</b> What the user is about to do (recipient, amount, calldata, signature) before it is on chain.</span><span class="n">62 requests</span></li></ol>
+    <p><button type="button" class="readmore" data-less aria-controls="method-rest">less</button></p>
+  </div>
 </section>
 
 <section id="where">
@@ -268,9 +262,7 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
     <thead><tr><th>Action</th><th class=num>Distinct address-linked requests</th><th class=num>Sequential chain</th><th class=num>All over Tor</th><th class=num>Backend via OHTTP, RPC via Tor</th></tr></thead>
     <tbody><tr><td>Connect signer</td><td class=num>3</td><td class=num>3</td><td class=num>+4 s</td><td class=num>+3.1 s</td></tr><tr><td>Create Safe (2-of-2)</td><td class=num>6</td><td class=num>6</td><td class=num>+9 s</td><td class=num>+7.6 s</td></tr><tr><td>View assets</td><td class=num>19</td><td class=num>8</td><td class=num>+12 s</td><td class=num>+9.5 s</td></tr><tr><td>View history</td><td class=num>17</td><td class=num>6</td><td class=num>+9 s</td><td class=num>+6.5 s</td></tr><tr><td>Send: owner A proposes</td><td class=num>28</td><td class=num>13</td><td class=num>+20 s</td><td class=num>+13.0 s</td></tr><tr><td>Send: owner B confirms + executes</td><td class=num>31</td><td class=num>13</td><td class=num>+20 s</td><td class=num>+17.3 s</td></tr><tr><td>Swap: get quote</td><td class=num>18</td><td class=num>8</td><td class=num>+12 s</td><td class=num>+8.1 s</td></tr><tr><td>Swap: owner B executes</td><td class=num>29</td><td class=num>14</td><td class=num>+21 s</td><td class=num>+13.1 s</td></tr><tr><td>Set custom RPC</td><td class=num>22</td><td class=num>12</td><td class=num>+18 s</td><td class=num>+14.1 s</td></tr><tr><td>Send review, custom RPC</td><td class=num>13</td><td class=num>7</td><td class=num>+10 s</td><td class=num>+6.6 s</td></tr></tbody>
   </table></div>
-  <details class="more"><summary>Latency sources</summary>
-    <p class="sub">Direct RPC: about 90 ms p50. Tor through an Arti client: 1.5 s p50, 7.3 s p95. tor-js in the browser: 2.0 s p50 per call after a 26 to 30 s bootstrap. PIR balance lookup: 1.75 s p50 over clearnet, about 760 KB uploaded per lookup. OHTTP: 120 ms for one extra relay hop, an assumption, not a measurement.</p>
-  </details>
+  <p class="sub">Sources: Direct RPC: about 90 ms p50. Tor through an Arti client: 1.5 s p50, 7.3 s p95. tor-js in the browser: 2.0 s p50 per call after a 26 to 30 s bootstrap. PIR balance lookup: 1.75 s p50 over clearnet, about 760 KB uploaded per lookup. OHTTP: 120 ms for one extra relay hop, an assumption, not a measurement.</p>
   <p>After a custom Sepolia RPC was set, 34 requests went to the custom node, 11 still went to Safe&#x27;s RPC (chain status 3, account &amp; contract reads 3, name resolution (ENS) 3), and 73 address-linked reads went to the Safe backend. The setting replaces the chain RPC only.</p>
 </section>
 
@@ -361,6 +353,15 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
       });
     });
   });
+})();
+
+(function () {
+  var rest = document.getElementById("method-rest"), dots = document.querySelector(".rm-dots");
+  var more = document.querySelector('.readmore:not([data-less])'), less = document.querySelector(".readmore[data-less]");
+  if (!rest || !more) return;
+  function set(open) { rest.hidden = !open; more.hidden = open; if (dots) dots.hidden = open; var end = document.querySelector(".rm-end"); if (end) end.hidden = !open; more.setAttribute("aria-expanded", open ? "true" : "false"); }
+  more.addEventListener("click", function () { set(true); });
+  less.addEventListener("click", function () { set(false); more.focus(); });
 })();
 </script>
 </body>
