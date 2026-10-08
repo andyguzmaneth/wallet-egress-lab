@@ -43,7 +43,8 @@ header .kicker { color: var(--text-muted); font-size: 13px; letter-spacing: .04e
 h1 { font-size: 30px; line-height: 1.2; margin: 6px 0 8px; letter-spacing: -.01em; }
 h2 { font-size: 19px; margin: 0 0 6px; }
 .lede { color: var(--text-secondary); max-width: 760px; margin: 0; }
-section { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-top: 18px; }
+section { border-top: 1px solid var(--border); padding: 30px 0 6px; margin-top: 30px; }
+header + section { border-top: 0; margin-top: 8px; }
 section > p { color: var(--text-secondary); max-width: 820px; }
 .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 22px; }
 .tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
@@ -71,7 +72,7 @@ svg { width: 100%; height: auto; display: block; }
 svg text { fill: var(--text-secondary); font: 12px ui-sans-serif, system-ui, sans-serif; }
 svg .axis { fill: var(--text-muted); font-size: 11px; }
 svg .steplbl { fill: var(--text-primary); font-size: 9.5px; font-weight: 600; }
-svg .stepdot { fill: var(--surface-1); stroke: var(--text-muted); stroke-width: 1; } svg .steptick { stroke: var(--text-muted); stroke-width: 1; opacity: .5; }
+svg .stepdot { fill: var(--surface-0); stroke: var(--text-muted); stroke-width: 1; } svg .steptick { stroke: var(--text-muted); stroke-width: 1; opacity: .5; }
 svg .lane { stroke: var(--grid); stroke-width: 1; }
 svg .band.b0 { fill: var(--band-a); } svg .band.b1 { fill: var(--band-b); }
 .t0 { fill: var(--t0); background: var(--t0); } .t1 { fill: var(--t1); background: var(--t1); }
@@ -94,7 +95,7 @@ svg rect[data-tip]:hover { stroke: var(--text-primary); stroke-width: 1; }
 .scroll { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; }
 th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
-thead th { color: var(--text-muted); font-weight: 600; font-size: 12px; position: sticky; top: 0; background: var(--surface-1); }
+thead th { color: var(--text-muted); font-weight: 600; font-size: 12px; position: sticky; top: 0; background: var(--surface-0); }
 th.sortable { cursor: pointer; user-select: none; }
 th.sortable:after { content: " ↕"; color: var(--text-muted); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -105,7 +106,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 :root[data-theme="dark"] .h5 { color: #0b0b0b; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .h5 { color: #0b0b0b; } }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
-.chips button { font: inherit; font-size: 12px; border: 1px solid var(--border); background: var(--surface-0); color: var(--text-secondary); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.chips button { font: inherit; font-size: 12px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
 .chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--text-primary); }
 .recs { counter-reset: r; list-style: none; padding: 0; margin: 0; }
 .recs li { counter-increment: r; display: grid; grid-template-columns: 28px 1fr; gap: 4px 10px; padding: 10px 0; border-bottom: 1px solid var(--grid); }
@@ -113,7 +114,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .recs .what { font-weight: 600; }
 .recs .why { grid-column: 2; color: var(--text-secondary); font-size: 14px; }
 .mini { max-width: 680px; }
-section .tiles { margin-top: 12px; } section .tile { background: var(--surface-0); }
+section .tiles { margin-top: 12px; }
 .eyebrow { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 4px; }
 h3 { font-size: 15px; margin: 22px 0 6px; }
 a { color: var(--accent, #2a78d6); }
