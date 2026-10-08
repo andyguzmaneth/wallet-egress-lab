@@ -247,7 +247,8 @@ def svg_units(reqs) -> str:
             body.append(f'<rect x="{x0 + c * cell:.1f}" y="{top + rr * cell:.1f}" width="{sq}" height="{sq}" rx="1" class="t{r["tier"]}"/>')
         linked = sum(1 for r in rs if r["tier"] >= 2)
         tip = f"{g}: {num(len(rs))} requests, {num(linked)} address-linked"
-        body.append(f'<rect x="{x0 - 1:.1f}" y="{top - 1}" width="{cols * cell + 2:.1f}" height="{rows * cell + 2:.1f}" fill="transparent" data-tip="{esc(tip)}"/>')
+        key = {"Safe backend API": "backend", "Safe RPC": "rpc", "Safe web app": "web", "Third parties": "third", "Custom RPC": "custom"}[g]
+        body.append(f'<rect x="{x0 - 2:.1f}" y="{top - 2}" width="{cols * cell + 3:.1f}" height="{rows * cell + 3:.1f}" rx="3" class="ugrp" data-b="{key}" data-tip="{esc(tip)}"/>')
         body.append(f'<text x="{x0:.1f}" y="12" class="ulbl">{esc(g)}</text><text x="{x0:.1f}" y="27" class="axis">{num(len(rs))}</text>')
         lbl_right = max(lbl_right, x0 + len(g) * 8.6 + 6)
         x0 += cols * cell + gap
@@ -445,13 +446,16 @@ def main():
                        f"{cr_saferpc} still went to Safe's RPC ({', '.join(f'{k.replace("RPC: ", "")} {v}' for k, v in cr_saferpc_m.most_common(3))}), "
                        f"and {cr_backend} address-linked reads went to the Safe backend. The setting replaces the chain RPC only.")
 
-    mainnet_html = ""
+    mainnet_html, mainnet_body = "", "<p>No mainnet pass in this run.</p>"
     if m:
         mreqs = [r for r in m["requests"] if not r["preflight"]]
         s_pairs = {(r["operator"], r["category"]) for r in reqs}
         new = Counter((r["operator"], r["category"]) for r in mreqs if (r["operator"], r["category"]) not in s_pairs)
         msens = [r for r in mreqs if r["tier"] >= 2]
         rows = "".join(f"<tr><td>{esc(o)}</td><td>{esc(c)}</td><td class=num>{n}</td></tr>" for (o, c), n in new.most_common(12))
+        mainnet_body = (f"<p>A read-only pass on mainnet watched a public Safe (<code>{esc(m['safe'][:10])}…</code>): {num(len(mreqs))} requests, "
+                        f"{num(len(msens))} of them address-linked. Hosts that appeared on mainnet and not on Sepolia:</p>"
+                        f'<div class="scroll"><table class="mini"><thead><tr><th>Operator</th><th>Service</th><th class=num>Requests</th></tr></thead><tbody>{rows or "<tr><td colspan=3>None</td></tr>"}</tbody></table></div>')
         mainnet_html = f"""
 <section id="mainnet">
 <div class="eyebrow">Mainnet pass</div>
@@ -489,7 +493,7 @@ def main():
     fails = [s for s in a["steps"] if not s["ok"]]
     fail_note = (" Steps that did not complete: " + ", ".join(esc(STEP_LABELS.get(s["name"], s["name"])) for s in fails) + ".") if fails else ""
 
-    findings, recs, recs_title = narrative(a, reqs, sens, idle_win, ga, ga_addr)
+    findings, recs, recs_title, acts = narrative(a, reqs, sens, idle_win, ga, ga_addr)
     lanes_n = Counter(lane(r) for r in reqs)
     by_step = Counter(r["step"] for r in reqs if r["step"] in {w["name"] for w in a["windows"]})
     top_step, top_n = by_step.most_common(1)[0]
@@ -532,8 +536,47 @@ def main():
         page = page.replace("{{" + k + "}}", v)
     out = Path(args.out) if args.out else Path(args.site) / "runs" / a["run"] / "index.html"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(page)
+    out.write_text(page.replace("{{OTHER}}", "brief.html").replace("{{OTHERLBL}}", "Short brief"))
     print("wrote", out)
+
+    # The brief: same data, one screen of argument, evidence in an appendix.
+    groups = [("Remove, or do it locally", "No added latency"), ("Hide the origin", f"+{OHTTP * 1000:.0f} ms per call"), ("Hide the content", f"+{PIR} s per lookup")]
+    fix_html = []
+    for gi, (gname, gcost) in enumerate(groups):
+        rows = [x for x in acts if x[0] == gi]
+        if not rows:
+            continue
+        lis = "".join(
+            f'<li><div class="leak">{leak}</div><div class="fix">{fix} <button type="button" class="readmore fmore" aria-expanded="false">more</button>'
+            f'<span class="fdet why" hidden> {det}</span></div><div class="chips-row"><span class="tag">{esc(n)}</span>'
+            f'<span class="tag{" free" if c in ("No added latency", "Faster") else ""}">{esc(c)}</span></div></li>'
+            for _, leak, fix, det, n, c in rows)
+        fix_html.append(f'<h3>{esc(gname)} <span class="gcost">{esc(gcost)}</span></h3><ol class="acts">{lis}</ol>')
+    free = sum(1 for x in acts if x[5] in ("No added latency", "Faster"))
+    brief_vals = {
+        "THESIS": f"Hiding the IP on Safe's RPC covers {pct(to_rpc, len(sens))} of the requests that link a Safe to its owner; {pct(to_backend, len(sens))} go to Safe's backend. "
+                  f"A relay in front of the backend, and {free} fixes that add no latency, cover most of the rest.",
+        "PICT_T": f"{num(len(reqs))} requests in {dur_min:.0f} minutes; {num(len(sens))} carry the Safe or an owner address",
+        "FIX_T": f"{len(acts)} changes; {free} of them add no latency",
+        "FIXES": "".join(fix_html),
+        "MAINBODY": mainnet_body,
+    }
+    brief = BRIEF_TEMPLATE
+    for k, v in (brief_vals | {
+        "RUN": esc(a["run"]), "DATE": time.strftime("%Y-%m-%d", time.gmtime(a["t0"])), "BACK": esc(args.back),
+        "NSTEPS": str(len(a["windows"])), "DUR": f"{dur_min:.0f}", "LEGEND": legend(), "UNITS": svg_units(reqs),
+        "BREAKDOWN": breakdown(sens), "LATSVG": svg_latency(proj), "PROJ": proj_rows, "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a),
+        "STEPKEY": "".join(f'<li data-step="{i}"><b>{i + 1}</b> {esc(STEP_LABELS.get(w["name"], w["name"]))}</li>' for i, w in enumerate(a["windows"])),
+        "MATRIX": "".join(mat_rows), "INV": "".join(inv_rows), "LAT_T": titles["LAT_T"], "SESSION_T": titles["SESSION_T"],
+        "TIERHELP": "".join(f'<li><span><i class="sw t{t}"></i><b>{esc(TIER_NAMES[t])}.</b> {esc(TIER_HELP[t])}</span><span class="n">{num(tc[t])} requests</span></li>' for t in range(4)),
+        "TOR": f"{TOR}", "TORJS": f"{TORJS}", "PIR": f"{PIR}", "OHTTP": f"{OHTTP * 1000:.0f}", "WINDOW": str(WINDOW),
+        "COOKIES": "necessary only" if a.get("cookies") == "necessary" else "accept all", "REPO": REPO, "CUSTOM": esc(custom_note),
+        "OTHER": "index.html", "OTHERLBL": "Full report",
+    }).items():
+        brief = brief.replace("{{" + k + "}}", v)
+    bout = out.parent / "brief.html"
+    bout.write_text(brief)
+    print("wrote", bout)
     if args.site:
         meta = {
             "run": a["run"], "date": time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(a["t0"])), "wallet": "Safe{Wallet} web",
@@ -555,7 +598,7 @@ def idle_gap(reqs, idle_win) -> float:
 
 def narrative(a, reqs, sens, idle_win, ga, ga_addr):
     from urllib.parse import parse_qs
-    F, R = [], []
+    F, R, A = [], [], []   # findings, recommendations, actions (leak -> fix) for the brief
     by_cat = Counter(r["category"] for r in reqs)
     n_cat = lambda *cs: sum(by_cat[c] for c in cs)
     # 1. Analytics with consent declined
@@ -564,10 +607,14 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
                   f"{len(ga)} analytics requests went to Google with consent mode set to denied. {len(ga_addr)} of them carry an address: "
                   "the event parameter <code>ep.safeAddress</code>, the user property <code>up.walletAddress</code> with the connected signer, "
                   "and the page URL in <code>dl</code>, which holds <code>?safe=</code>. Declining removes cookies, not the data."))
+        A.append((0, "Google Analytics gets the Safe and owner address with analytics declined.", "Send nothing without consent; drop addresses from events and URLs.",
+                  F[-1][1], f"{num(len(ga_addr))} requests", "No added latency"))
         R.append(("Stop analytics when consent is declined, and drop addresses from events and page URLs.",
                   f"Removes {len(ga_addr)} address-linked requests to a third party.", f"{num(len(ga_addr))} requests", "No added latency"))
     pages = [r for r in reqs if r["operator"] == "Safe" and CAT_TECH.get(r["category"]) == "static" and r["tier"] >= 2]
     if pages:
+        A.append((0, "Page loads carry the Safe address to the web host in the query string.", "Keep the address in client state or the URL fragment.",
+                  f"{len(pages)} requests for page code and data carried the address in the query string.", f"{num(len(pages))} requests", "No added latency"))
         R.append(("Keep the Safe address out of the URLs the browser fetches.",
                   f"{len(pages)} requests for page code and data carried <code>?safe=</code> to the web host. Holding the address in client state, or in the URL fragment, keeps it on the device.", f"{num(len(pages))} requests", "No added latency"))
     # 2. Backend polling
@@ -577,6 +624,13 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
         F.append(("The Safe backend links the IP address to the Safe address continuously while the app is open.",
                   f"On an idle home screen the app sent {per_min:.0f} account-state requests per minute (Safe info, balances, queue, history), "
                   f"about one burst every {idle_gap(reqs, idle_win):.0f} s. Each carries the Safe address in the URL."))
+        n_be = sum(1 for r in sens if r['host'] in ('safe-client.safe.global', 'api.safe.global'))
+        A.append((1, f"Safe's backend links the IP address to the Safe address, including transaction content before signing.", "Put an Oblivious HTTP relay, run by a separate operator, in front of the backend.",
+                  F[-1][1] + " The relay sees the IP address and not the request; the backend sees the request and not the IP address.",
+                  f"{num(n_be)} requests", f"+{OHTTP * 1000:.0f} ms per call"))
+        A.append((0, f"The idle app asks the backend about the Safe every {idle_gap(reqs, idle_win):.0f} s.", "Poll less, and only when something changed.",
+                  "Poll the Safe info endpoint only, fetch balances and history when its tags change, and back off when the tab is hidden.",
+                  f"{per_min:.0f} per minute idle", "No added latency"))
         R.append(("Put an Oblivious HTTP relay, run by a separate operator, in front of the Safe backend.",
                   f"The relay sees the IP address and not the request; the backend sees the request and not the IP address. "
                   f"Covers the {sum(1 for r in sens if r['host'] in ('safe-client.safe.global', 'api.safe.global'))} backend requests, which are the largest share. "
@@ -584,7 +638,7 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
                   f"{num(sum(1 for r in sens if r['host'] in ('safe-client.safe.global', 'api.safe.global')))} requests", f"+{OHTTP * 1000:.0f} ms per call"))
         R.append(("Poll less, and only when something changed.",
                   "Poll the Safe info endpoint only, fetch balances and history when its tags change, and back off when the tab is hidden. "
-                  "Fewer samples give an observer fewer IP-to-address links and less timing.", f"{per_min:.0f} requests per minute idle", "No added latency"))
+                  "Fewer samples give an observer fewer IP-to-address links and less timing.", f"{per_min:.0f} per minute idle", "No added latency"))
     # 3. Mainnet RPC lookups on a testnet session
     ens = [r for r in reqs if r["category"] == "RPC: name resolution (ENS)"]
     sanc = [r for r in reqs if r["category"] == "RPC: sanctions screening"]
@@ -592,6 +646,8 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
         F.append(("Owner and Safe addresses go to Safe's mainnet RPC during a Sepolia session.",
                   f"{len(sanc)} requests call the Chainalysis sanctions oracle (<code>isSanctioned</code>) for the Safe and its signers, and "
                   f"{len(ens)} requests do ENS reverse lookups, both on <code>rpc.safe.global/1</code>. A custom RPC does not change this path."))
+        A.append((0, "Safe's mainnet RPC gets sanctions checks and ENS lookups for the owners, even on Sepolia.", "Check a local sanctions list; resolve names through the user's RPC.",
+                  F[-1][1], f"{num(len(sanc) + len(ens))} requests", "Faster"))
         R.append(("Check sanctions against a local list, and resolve names through the user's RPC.",
                   f"Removes {len(sanc)} sanctions requests outright and moves {len(ens)} name lookups to the path the user picked. Local checks are faster than a round trip.", f"{num(len(sanc) + len(ens))} requests", "Faster"))
     # 4. Intent before chain
@@ -613,6 +669,8 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
                   "for the Safe address on 12 networks against both <code>api.cow.fi</code> and <code>barn.api.cow.fi</code>. "
                   f"It also looked up the user's IP address and country at <code>api.country.is</code> ({len(geo)} request{"s" if len(geo) != 1 else ""}), loaded a Cloudflare Turnstile check, "
                   f"and reported to Sentry ({sum(1 for r in sentry if r['tier'] >= 2)} of {len(sentry)} reports carry the Safe address) and LaunchDarkly."))
+        A.append((0, "The CoW widget asks about the Safe on 12 chains and two environments, and looks up the user's IP.", "Query the active chain only; geolocate server-side.",
+                  F[-1][1], f"{num(len(hist))} requests", "No added latency"))
         R.append(("Have the CoW widget query only the active chain and environment, and geolocate server-side.",
                   f"Cuts most of the {len(hist)} order-history requests and removes a third party that returns the user's IP address to the page.", f"{num(len(hist))} requests", "No added latency"))
     # 6. WalletConnect telemetry
@@ -620,11 +678,16 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
     if wc:
         F.append(("The WalletConnect SDK reports to Reown even when WalletConnect is not used.",
                   f"{len(wc)} requests to <code>pulse.walletconnect.org</code> carry a persistent <code>did:key</code> client ID from the first page load."))
+        A.append((0, "WalletConnect reports a persistent client ID although it is not used.", "Load the SDK only when the user picks WalletConnect.",
+                  F[-1][1], f"{num(len(wc))} requests", "No added latency"))
         R.append(("Load the WalletConnect SDK only when the user picks WalletConnect.",
                   f"Removes {len(wc)} telemetry requests and a persistent client ID from sessions that use an injected wallet.", f"{num(len(wc))} requests", "No added latency"))
     # 7. Content privacy for RPC reads
     reads = [r for r in reqs if r["category"] == "RPC: account & contract reads" and r["tier"] >= 2]
     if reads:
+        A.append((2, "RPC reads of balance, nonce and code name the address they ask about.", "anon-RPC for the origin; PIR for the reads made on open.",
+                  f"{len(reads)} RPC reads carried an address. Over Tor each sequential read adds about {TOR} s; a PIR balance lookup costs about {PIR} s and 760 KB upload, so PIR fits the few reads the wallet needs on open, not polling.",
+                  f"{num(len(reads))} requests", f"+{PIR} s per PIR lookup"))
         R.append(("Add anon-RPC for the origin and PIR for balance, nonce and code reads.",
                   f"{len(reads)} RPC reads carried an address. Over Tor each sequential read adds about {TOR} s; a PIR balance lookup costs about {PIR} s and "
                   "760 KB upload, so PIR fits the few reads the wallet needs on open, not polling.", f"{num(len(reads))} requests", f"+{PIR} s per PIR lookup"))
@@ -636,7 +699,7 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
         for t, d, n, c in R) + "</ol>"
     free = sum(1 for *_, c in R if c in ("No added latency", "Faster"))
     title = f"{len(R)} changes; {free} of them add no latency"
-    return fh, rh, title
+    return fh, rh, title, A
 
 
 REPO = "https://github.com/andyguzmaneth/wallet-egress-lab"
@@ -656,12 +719,13 @@ def repro_html(heading: str) -> str:
 
 TEMPLATE = (Path(__file__).parent / "template.html").read_text()
 INDEX_TEMPLATE = (Path(__file__).parent / "index.html").read_text()
+BRIEF_TEMPLATE = (Path(__file__).parent / "template-brief.html").read_text()
 
 
 def build_index(site: Path):
     metas = sorted((json.loads(f.read_text()) for f in site.glob("runs/*/meta.json")), key=lambda m: m["run"], reverse=True)
     rows = "".join(
-        f'<tr><td><a href="runs/{esc(x["run"])}/index.html">{esc(x["date"])}</a><div class=sub>{esc(x["run"])}</div></td>'
+        f'<tr><td><a href="runs/{esc(x["run"])}/index.html">{esc(x["date"])}</a><div class=sub>{esc(x["run"])} · <a href="runs/{esc(x["run"])}/brief.html">brief</a></div></td>'
         f'<td>{esc(x["wallet"])}<div class=sub>{esc(x["plan"])}</div></td><td class=num>{x["minutes"]} min</td>'
         f'<td class=num>{num(x["requests"])}</td><td class=num>{num(x["linked"])}<div class=sub>{esc(x["linked_pct"])}</div></td>'
         f'<td class=num>{esc(x["backend_pct"])}</td><td class=num>{esc(x["rpc_pct"])}</td>'

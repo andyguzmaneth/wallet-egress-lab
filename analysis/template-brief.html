@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Safe{Wallet} Egress Inventory</title>
+<title>Safe{Wallet} Egress Brief</title>
 <style>
 :root {
   color-scheme: light;
@@ -194,74 +194,68 @@ body.nofloat .rail, body.nofloat .theme { display: none; }
 svg .band.hl { fill: color-mix(in srgb, var(--t2) 14%, transparent); }
 svg .stepdot.hl { fill: var(--t2); stroke: var(--t2); } svg .steplbl.hl { fill: #fff; } svg .steptick.hl { stroke: var(--t2); opacity: 1; }
 svg .lblbg { fill: var(--surface-0); } svg .steplbl { pointer-events: none; } svg .stepdot { cursor: pointer; }
+
+.thesis { font-family: Georgia, "Times New Roman", serif; font-size: 22px; line-height: 1.4; color: var(--text-primary); max-width: 860px; margin: 10px 0 8px; text-wrap: pretty; }
+.methodline { color: var(--text-muted); font-size: 13.5px; margin: 0; }
+.acts { list-style: none; padding: 0; margin: 4px 0 0; counter-reset: a; }
+.acts li { display: grid; grid-template-columns: 1fr 1fr 240px; gap: 4px 22px; padding: 11px 0; border-top: 1px solid var(--grid); align-items: baseline; }
+.acts .leak { color: var(--text-secondary); font-size: 14px; }
+.acts .fix { font-weight: 600; font-size: 14.5px; }
+.acts .fix .why { font-weight: 400; color: var(--text-secondary); font-size: 14px; }
+.acts .chips-row { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.acts .tag.free { color: var(--text-primary); border-color: var(--text-muted); }
+.acthead { display: grid; grid-template-columns: 1fr 1fr 240px; gap: 22px; font-size: 12px; color: var(--text-muted); font-weight: 600; margin-top: 10px; } .acthead span:last-child { text-align: right; }
+h3 .gcost { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12.5px; font-weight: 500; color: var(--text-muted); margin-left: 6px; }
+svg .ugrp { fill: transparent; stroke: transparent; stroke-width: 2; cursor: pointer; }
+svg .ugrp:hover { stroke: var(--text-muted); } svg .ugrp.sel { stroke: var(--text-primary); }
+.apx-item { border-top: 1px solid var(--grid); padding: 10px 0; }
+.apx-item > h3 { margin: 0; font-size: 16px; }
+.apx-toggle { font: inherit; background: none; border: 0; padding: 0; cursor: pointer; color: var(--text-primary); text-align: left; }
+.apx-toggle::before { content: "+ "; color: var(--accent); font-family: ui-sans-serif, system-ui, sans-serif; }
+.apx-toggle[aria-expanded="true"]::before { content: "\2212  "; }
+.apx-body { padding-top: 10px; }
+@media (max-width: 760px) { .acts li, .acthead { grid-template-columns: 1fr; } .acthead { display: none; } .acts .chips-row { justify-content: flex-start; } .thesis { font-size: 19px; } }
 </style>
 </head>
 <body>
 <button class="theme" type="button" id="theme">Theme</button>
-<nav class="rail" aria-label="Sections"><ul><li><a href="#summary" data-rail="summary"><span class="tick"></span><span class="label">Summary</span></a></li><li><a href="#method" data-rail="method"><span class="tick"></span><span class="label">How we did it</span></a></li><li><a href="#where" data-rail="where"><span class="tick"></span><span class="label">Where requests go</span></a></li><li><a href="#routing" data-rail="routing"><span class="tick"></span><span class="label">Routing plan</span></a></li><li><a href="#who" data-rail="who"><span class="tick"></span><span class="label">Who learns what</span></a></li><li><a href="#session" data-rail="session"><span class="tick"></span><span class="label">Session timeline</span></a></li><li><a href="#actions" data-rail="actions"><span class="tick"></span><span class="label">Per user action</span></a></li><li><a href="#inventory" data-rail="inventory"><span class="tick"></span><span class="label">Endpoint inventory</span></a></li><li><a href="#latency" data-rail="latency"><span class="tick"></span><span class="label">Latency cost</span></a></li><li><a href="#recs" data-rail="recs"><span class="tick"></span><span class="label">Recommendations</span></a></li>{{RAILMAINNET}}<li><a href="#reproduce" data-rail="reproduce"><span class="tick"></span><span class="label">Reproduce</span></a></li></ul></nav>
+<nav class="rail" aria-label="Sections"><ul><li><a href="#picture" data-rail="picture"><span class="tick"></span><span class="label">The picture</span></a></li><li><a href="#fix" data-rail="fix"><span class="tick"></span><span class="label">What to change</span></a></li><li><a href="#latency" data-rail="latency"><span class="tick"></span><span class="label">Latency cost</span></a></li><li><a href="#session" data-rail="session"><span class="tick"></span><span class="label">Session timeline</span></a></li><li><a href="#appendix" data-rail="appendix"><span class="tick"></span><span class="label">Appendix</span></a></li></ul></nav>
 <main>
 <header>
-  <div class="kicker"><a class="back" href="{{BACK}}">All runs</a> · Safe{Wallet} web · Sepolia · {{DATE}} · run {{RUN}} · <a href="{{OTHER}}">{{OTHERLBL}}</a></div>
-  <h1>Safe{Wallet} Egress Inventory</h1>
-  <p class="lede">Every request a Safe{Wallet} session sends, who receives it, what it reveals, and which privacy treatment each one needs.</p>
+  <div class="kicker"><a class="back" href="{{BACK}}">All runs</a> · Safe{Wallet} web · Sepolia · {{DATE}} · <a href="{{OTHER}}">{{OTHERLBL}}</a></div>
+  <h1>Safe{Wallet} Egress Brief</h1>
+  <p class="thesis">{{THESIS}}</p>
+  <p class="methodline">One scripted user, {{NSTEPS}} actions on Sepolia, {{DUR}} minutes, every request recorded at a proxy. <a href="#apx-method">Method</a></p>
 </header>
 
-<section id="summary">
-  <h2>Summary</h2>
-  <p class="unitcap">Every one of the {{N}} requests in a {{DUR}}-minute session, one square each, by receiver:</p>
+<section id="picture">
+  <div class="eyebrow">The picture</div>
+  <h2>{{PICT_T}}</h2>
   {{LEGEND}}
   <div class="unitwrap scroll">{{UNITS}}</div>
-  <div class="tiles two">
-    <div class="tile"><div class="v">{{SENS}}</div><div class="l">requests ({{SENSPCT}}) carry an address or reveal a pending action. {{BACKEND}} of them go to the Safe backend API, {{RPC}} to Safe's RPC.</div></div>
-    <div class="tile"><div class="v">{{NTHIRDADDR}}</div><div class="l">third parties receive an address: {{THIRDADDR}}.</div></div>
-  </div>
-  <h3>Key findings</h3>
-  {{FINDINGS}}
-</section>
-
-<section id="method">
-  <h2>How we did it</h2>
-  <p>A script played one user through {{NSTEPS}} actions on Sepolia: create a 2-of-2 Safe, receive ETH and WETH, send ETH through the multisig flow, swap WETH for COW in the CoW widget, sit idle, and switch to a custom RPC. A second, read-only pass opened a public Safe on mainnet. A recording proxy captured every request, and each request got a privacy tier<span class="rm-end" hidden>.</span><span class="rm-dots">…</span> <button type="button" class="readmore" id="method-more" aria-expanded="false" aria-controls="method-rest">more</button></p>
-  <div id="method-rest" hidden>
-    <p>Chromium (Playwright, fresh profile, QUIC off) ran behind mitmproxy with a trusted CA, so every request from the page, its iframes and its service worker was recorded with headers and bodies. The signer was an injected EIP-1193 provider whose keys and RPC stay outside the browser, so the capture holds only traffic that Safe{Wallet} and its embedded widgets make. A blank-page baseline run identified the browser's own traffic, which is excluded. Identifiers were found by searching URLs, headers and bodies for the Safe address, the owners, the counterparty, safeTxHash, CoW order ids and analytics client IDs. Each request gets the highest tier whose rule it matches, from least to most sensitive:</p>
-    <ol class="tierhelp">{{TIERHELP}}</ol>
-    <p><button type="button" class="readmore" id="method-less" aria-controls="method-rest">less</button></p>
-  </div>
-</section>
-
-<section id="where">
-  <div class="eyebrow">Where requests go</div>
-  <h2>{{WHERE_T}}</h2>
-  <p>Hiding the IP address on the RPC path covers only the RPC share.</p>
-  <p class="sub hint">Counts are address-linked requests. Select a segment to see what it contains.</p>
-  <div class="split" role="group" aria-label="Receivers">
-    <button type="button" class="seg t3" style="flex:{{FB}}" data-b="backend" aria-expanded="false" aria-controls="bd-backend"><b>Safe backend API</b> {{BACKEND}}<span class="sub">{{NBACKEND}} requests</span></button>
-    <button type="button" class="seg t2" style="flex:{{FR}}" data-b="rpc" aria-expanded="false" aria-controls="bd-rpc"><b>Safe RPC</b> {{RPC}}<span class="sub">{{NRPC}} requests</span></button>
-    <button type="button" class="seg sweb ink-dark" style="flex:{{FS}}" data-b="web" aria-expanded="false" aria-controls="bd-web"><b>Safe web app</b> {{SAFEOTHER}}<span class="sub">{{NSAFEOTHER}} requests</span></button>
-    <button type="button" class="seg t0 ink-dark" style="flex:{{FT}}" data-b="third" aria-expanded="false" aria-controls="bd-third"><b>Third parties</b> {{THIRD}}<span class="sub">{{NTHIRD}} requests</span></button>
-    <button type="button" class="seg t0 ink-dark" style="flex:{{FC}}; opacity:.6" data-b="custom" aria-expanded="false" aria-controls="bd-custom"><b>Custom RPC</b> {{CUSTOMPCT}}<span class="sub">{{NCUSTOM}} requests</span></button>
-  </div>
+  <p class="sub hint">One square per request. Select a group to see what it contains.</p>
   {{BREAKDOWN}}
 </section>
 
-<section id="routing">
-  <div class="eyebrow">Routing plan</div>
-  <h2>{{ROUTING_T}}</h2>
-  <p>Each request, sorted by the cheapest treatment that removes the address-to-IP link.</p>
-  <div class="scroll"><table class="routing">
-    <thead><tr><th>Treatment</th><th class=num>Requests</th><th class=num>Address-linked</th><th>Largest services</th><th>Added latency</th></tr></thead>
-    <tbody>{{ROUTING}}</tbody>
-  </table></div>
+<section id="fix">
+  <div class="eyebrow">What to change</div>
+  <h2>{{FIX_T}}</h2>
+  <div class="acthead"><span>What leaks</span><span>Fix</span><span>Reach and cost</span></div>
+  {{FIXES}}
 </section>
 
-<section id="who">
-  <div class="eyebrow">Who learns what</div>
-  <h2>{{WHO_T}}</h2>
-  <p>Requests per receiver that carry each identifier; the highlighted cell is what each receiver sees most. Every request also carries the IP address.</p>
-  <div class="scroll"><table>
-    <thead><tr><th>Receiver</th><th class=num>All requests</th><th class=num>Safe address</th><th class=num>Owner address</th><th class=num>Counterparty</th><th class=num>Tx hash / order id</th><th class=num>Client ID</th><th class=num>Intent</th></tr></thead>
-    <tbody>{{MATRIX}}</tbody>
+<section id="latency">
+  <div class="eyebrow">Latency cost</div>
+  <h2>{{LAT_T}}</h2>
+  <div class="legend"><span><i class="sw t2"></i>Relay for the backend ({{OHTTP}} ms), Tor for RPC</span><span><i class="sw t3"></i>Everything over Tor ({{TOR}} s)</span></div>
+  <div class="scroll">{{LATSVG}}</div>
+  <p class="sub"><button type="button" class="readmore" data-show="lat-table">Show the numbers</button></p>
+  <div id="lat-table" hidden><div class="scroll"><table class="mini">
+    <thead><tr><th>Action</th><th class=num>Distinct address-linked requests</th><th class=num>Sequential chain</th><th class=num>All over Tor</th><th class=num>Backend via OHTTP, RPC via Tor</th></tr></thead>
+    <tbody>{{PROJ}}</tbody>
   </table></div>
+  <p class="sub">Each bar is the longest chain of address-linked requests that run one after another in the first {{WINDOW}} s of the action, times the added latency per request. An upper bound. Sources: Tor through an Arti client {{TOR}} s p50; tor-js {{TORJS}} s p50; PIR balance lookup {{PIR}} s p50, about 760 KB upload; OHTTP {{OHTTP}} ms, assumed.</p></div>
+  <p class="sub">{{CUSTOM}}</p>
 </section>
 
 <section id="session">
@@ -282,17 +276,20 @@ svg .lblbg { fill: var(--surface-0); } svg .steplbl { pointer-events: none; } sv
   </div>
 </section>
 
-<section id="actions">
-  <div class="eyebrow">Per user action</div>
-  <h2>{{ACTIONS_T}}</h2>
+<section id="appendix">
+  <div class="eyebrow">Appendix</div>
+  <h2>Evidence and method</h2>
+  <div class="apx-item" id="apx-who"><h3><button type="button" class="apx-toggle" aria-expanded="false" aria-controls="apx-who-b">Who learns what</button></h3><div class="apx-body" id="apx-who-b" hidden>
+  <div class="scroll"><table>
+    <thead><tr><th>Receiver</th><th class=num>All requests</th><th class=num>Safe address</th><th class=num>Owner address</th><th class=num>Counterparty</th><th class=num>Tx hash / order id</th><th class=num>Client ID</th><th class=num>Intent</th></tr></thead>
+    <tbody>{{MATRIX}}</tbody>
+  </table></div>
+  </div></div>
+  <div class="apx-item" id="apx-actions"><h3><button type="button" class="apx-toggle" aria-expanded="false" aria-controls="apx-actions-b">Requests per user action</button></h3><div class="apx-body" id="apx-actions-b" hidden>
   {{LEGEND}}
   <div class="scroll">{{STEPS}}</div>
-</section>
-
-<section id="inventory">
-  <div class="eyebrow">Endpoint inventory</div>
-  <h2>{{INV_T}}</h2>
-  <p>One row per operator and service. Latency is the time from request start to the last response byte, measured at the proxy. Click a header to sort.</p>
+  </div></div>
+  <div class="apx-item" id="apx-inv"><h3><button type="button" class="apx-toggle" aria-expanded="false" aria-controls="apx-inv-b">Endpoint inventory</button></h3><div class="apx-body" id="apx-inv-b" hidden>
   <div class="chips" id="chips">
     <button type="button" aria-pressed="true" data-t="all">All</button>
     <button type="button" aria-pressed="false" data-t="3">Intent</button>
@@ -305,36 +302,18 @@ svg .lblbg { fill: var(--surface-0); } svg .steplbl { pointer-events: none; } sv
     <tbody>{{INV}}</tbody>
   </table></div>
   <button class="more" type="button" id="more">Show all rows</button>
+  </div></div>
+  <div class="apx-item" id="apx-mainnet"><h3><button type="button" class="apx-toggle" aria-expanded="false" aria-controls="apx-mainnet-b">Mainnet pass</button></h3><div class="apx-body" id="apx-mainnet-b" hidden>
+  {{MAINBODY}}
+  </div></div>
+  <div class="apx-item" id="apx-method"><h3><button type="button" class="apx-toggle" aria-expanded="false" aria-controls="apx-method-b">Method and tiers</button></h3><div class="apx-body" id="apx-method-b" hidden>
+  <p>Chromium (Playwright, fresh profile, QUIC off) ran behind mitmproxy, so every request from the page, its iframes and its service worker was recorded with headers and bodies. The signer was an injected EIP-1193 provider whose keys and RPC stay outside the browser. A blank-page baseline run removed the browser's own traffic. Identifiers were found by searching URLs, headers and bodies for the Safe address, the owners, the counterparty, safeTxHash, CoW order ids and analytics client IDs. Cookie banner choice: {{COOKIES}}. Each request gets the highest tier whose rule it matches:</p>
+  <ol class="tierhelp">{{TIERHELP}}</ol>
+  <p>Setup and the full command list: <a href="{{REPO}}">repository README</a>.</p>
+  </div></div>
 </section>
 
-<section id="latency">
-  <div class="eyebrow">Latency cost</div>
-  <h2>{{LAT_T}}</h2>
-  <p>The added wait for each action: the longest chain of address-linked requests that run one after another, times the added latency per request. An upper bound.</p>
-  <div class="legend"><span><i class="sw t2"></i>Relay for the backend ({{OHTTP}} ms), Tor for RPC</span><span><i class="sw t3"></i>Everything over Tor ({{TOR}} s)</span></div>
-  <div class="scroll">{{LATSVG}}</div>
-  <p class="sub"><button type="button" class="readmore" data-show="lat-table">Show the numbers</button></p>
-  <div id="lat-table" hidden><div class="scroll"><table class="mini">
-    <thead><tr><th>Action</th><th class=num>Distinct address-linked requests</th><th class=num>Sequential chain</th><th class=num>All over Tor</th><th class=num>Backend via OHTTP, RPC via Tor</th></tr></thead>
-    <tbody>{{PROJ}}</tbody>
-  </table></div>
-  <p class="sub">Only requests in the first {{WINDOW}} s after the action count, each endpoint once.</p>
-  <p class="sub">Sources: Direct RPC: about 90 ms p50. Tor through an Arti client: {{TOR}} s p50, 7.3 s p95. tor-js in the browser: {{TORJS}} s p50 per call after a 26 to 30 s bootstrap. PIR balance lookup: {{PIR}} s p50 over clearnet, about 760 KB uploaded per lookup. OHTTP: {{OHTTP}} ms for one extra relay hop, an assumption, not a measurement.</p>
-</div>
-  <p>{{CUSTOM}}</p>
-</section>
-
-<section id="recs">
-  <div class="eyebrow">Recommendations</div>
-  <h2>{{RECS_T}}</h2>
-  {{RECS}}
-</section>
-
-{{MAINNET}}
-
-{{REPRO}}
-
-<footer>Generated by wallet-egress-lab from run {{RUN}}. <a href="{{BACK}}">All runs</a></footer>
+<footer>Generated by wallet-egress-lab from run {{RUN}}. <a href="{{OTHER}}">{{OTHERLBL}}</a> · <a href="{{BACK}}">All runs</a></footer>
 </main>
 <div class="tip" id="tip"></div>
 <script>
@@ -478,6 +457,24 @@ document.querySelectorAll("[data-copy]").forEach(function (b) {
   function hl(i, on) { box.querySelectorAll('[data-step="' + i + '"]').forEach(function (el) { el.classList.toggle("hl", on); }); }
   box.addEventListener("mouseover", function (e) { var t = e.target.closest("[data-step]"); if (t) hl(t.dataset.step, true); });
   box.addEventListener("mouseout", function (e) { var t = e.target.closest("[data-step]"); if (t) hl(t.dataset.step, false); });
+})();
+
+(function () {
+  function openApx(id) { var b = document.querySelector('[aria-controls="' + id + '-b"]'); if (b && b.getAttribute("aria-expanded") !== "true") b.click(); }
+  document.querySelectorAll(".apx-toggle").forEach(function (b) {
+    b.addEventListener("click", function () { var t = document.getElementById(b.getAttribute("aria-controls")); t.hidden = !t.hidden; b.setAttribute("aria-expanded", t.hidden ? "false" : "true"); });
+  });
+  document.querySelectorAll('a[href^="#apx-"]').forEach(function (a) { a.addEventListener("click", function () { openApx(a.getAttribute("href").slice(1)); }); });
+  var groups = Array.prototype.slice.call(document.querySelectorAll("svg .ugrp"));
+  groups.forEach(function (g) {
+    g.addEventListener("click", function () {
+      var on = !g.classList.contains("sel");
+      groups.forEach(function (o) {
+        var mine = on && o === g; o.classList.toggle("sel", mine);
+        var p = document.getElementById("bd-" + o.getAttribute("data-b")); if (p) p.hidden = !mine;
+      });
+    });
+  });
 })();
 </script>
 </body>
