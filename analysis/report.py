@@ -543,7 +543,8 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
         R.append(("For RPC reads that carry an address, add anon-RPC for the origin and PIR for balance, nonce and code.",
                   f"{len(reads)} RPC reads carried an address. Over Tor each sequential read adds about {TOR} s; a PIR balance lookup costs about {PIR} s and "
                   "760 KB upload, so PIR fits the few reads the wallet needs on open, not polling."))
-    fh = '<ol class="findings">' + "".join(f"<li>{t} <span>{d}</span></li>" for t, d in F) + "</ol>"
+    fh = '<ol class="findings">' + "".join(
+        f'<li>{t} <button type="button" class="readmore fmore" aria-expanded="false">more</button><span class="fdet" hidden> {d}</span></li>' for t, d in F) + "</ol>"
     rh = '<ol class="recs">' + "".join(f'<li><div class="what">{t}</div><div class="why">{d}</div></li>' for t, d in R) + "</ol>"
     return fh, rh
 
