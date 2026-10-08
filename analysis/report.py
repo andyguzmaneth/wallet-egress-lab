@@ -1,5 +1,6 @@
 """Render one self-contained HTML report from analysed runs.
 
+Writes the brief (index.html) and the full report (full.html) from one template.
 Usage: python3 -I analysis/report.py --sepolia <run> [--mainnet <run>] --out report.html
        python3 -I analysis/report.py --sepolia <run> [--mainnet <run>] --site docs   (adds the run to the site)
 """
@@ -29,19 +30,18 @@ OPERATOR_ORDER = ["Safe", "CoW Protocol", "Google Analytics", "WalletConnect (Re
 TOR = 1.5          # Arti/Tor p50 for an RPC call (pir-wallet-bench, kass-tor run, 2026-10-06)
 TORJS = 2.0        # tor-js in the browser, p50 per call (anon-RPC bench)
 PIR = 1.75         # PIR balance lookup p50 over clearnet (pir-wallet-bench clean1)
-OHTTP = 0.12       # one extra relay hop (assumption, see Method)
 WINDOW = 15        # seconds after an action used for the latency projection
 
 TECH = {
     "static": ("Plain path; self-host third-party assets", 0.0),
     "telemetry": ("Do not send without consent; strip addresses", 0.0),
     "challenge": ("Needs the IP by design; check server-side or use privacy-pass tokens", 0.0),
-    "backend_read": ("Hide origin: OHTTP relay (or Tor) in front of the API", OHTTP),
+    "backend_read": ("Hide origin: anon-RPC transport (Tor) in front of the API", TOR),
     "rpc_read": ("anon-RPC for origin; PIR for balance, nonce, code", TOR),
     "rpc_public": ("Plain path, or the same anonymous path", 0.0),
     "rpc_name": ("User's RPC or anon-RPC; cache; PIR name index later", TOR),
     "rpc_sanctions": ("Check a local copy of the public list", 0.0),
-    "intent": ("Hide origin only (OHTTP / Tor); simulate locally where possible", OHTTP),
+    "intent": ("Hide origin only (anon-RPC transport); simulate locally where possible", TOR),
 }
 CAT_TECH = {
     "App code & assets": "static", "Config & metadata": "static", "Account state": "backend_read",
@@ -214,18 +214,18 @@ def svg_latency(proj) -> str:
     H = len(proj) * rh + 34
     mx = max(x["tor_all"] for x in proj) or 1
     x = lambda v: left + (W - left - 60) * v / mx
-    out = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Added wait per action: relay for the backend versus everything over Tor">']
+    out = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Estimated added wait per action with anon-RPC">']
     for v in range(0, int(mx) + 1, 5):
         out.append(f'<line x1="{x(v):.1f}" x2="{x(v):.1f}" y1="4" y2="{H - 22}" class="lane"/>'
                    f'<text x="{x(v):.1f}" y="{H - 6}" class="axis" text-anchor="middle">+{v} s</text>')
     for i, p_ in enumerate(proj):
         y = 16 + i * rh
         lbl = STEP_LABELS.get(p_["step"], p_["step"])
-        a_, b_ = x(p_["mixed"]), x(p_["tor_all"])
+        b_ = x(p_["tor_all"])
+        tip = f'{lbl}: about +{p_["tor_all"]:.1f} s, {p_["depth"]} sequential address-linked requests x {TOR} s'
         out.append(f'<text x="{left - 12}" y="{y + 4}" text-anchor="end" class="lanelbl">{esc(lbl)}</text>')
-        out.append(f'<line x1="{a_:.1f}" x2="{b_:.1f}" y1="{y}" y2="{y}" class="dumb"/>')
-        out.append(f'<circle cx="{a_:.1f}" cy="{y}" r="5" class="t2" data-tip="{esc(lbl)}: +{p_["mixed"]:.1f} s with a relay for the backend, Tor for RPC"/>')
-        out.append(f'<circle cx="{b_:.1f}" cy="{y}" r="5" class="t3" data-tip="{esc(lbl)}: +{p_["tor_all"]:.1f} s with everything over Tor"/>')
+        out.append(f'<line x1="{left}" x2="{b_:.1f}" y1="{y}" y2="{y}" class="dumb"/>')
+        out.append(f'<circle cx="{b_:.1f}" cy="{y}" r="5" class="t3" data-tip="{esc(tip)}"/>')
         out.append(f'<text x="{b_ + 10:.1f}" y="{y + 4}" class="axis">+{p_["tor_all"]:.0f} s</text>')
     out.append("</svg>")
     return "".join(out)
@@ -265,7 +265,6 @@ def legend() -> str:
 
 
 def mixbar(mix):
-    tot = sum(mix) or 1
     segs = "".join(f'<i class="t{t}" style="flex:{n}" title="{n} {esc(TIER_NAMES[t].lower())}"></i>' for t, n in enumerate(mix) if n)
     lbl = ", ".join(f"{n} {TIER_NAMES[t].split()[0].lower()}" for t, n in reversed(list(enumerate(mix))) if n)
     return f'<div class="mix">{segs}</div><div class="sub">{esc(lbl)}</div>'
@@ -290,40 +289,6 @@ def inventory(a):
         })
     rows.sort(key=lambda r: (-(r["mix"][2] + r["mix"][3]), -r["mix"][1], -r["n"]))
     return rows
-
-
-LANES = [
-    ("Plain path", "Address-free code, config, prices and chain status. No change.", "none"),
-    ("Remove, or do it locally", "Telemetry without consent, IP geolocation, the Safe address in page URLs (keep it in the client), sanctions checks against a local copy of the public list.", "none; fewer round trips"),
-    ("Hide the origin", "Calls whose content must reach the server: Safe and CoW APIs, transaction preview and proposal, name lookups. OHTTP relay for the APIs, anon-RPC for RPC.",
-     f"about {OHTTP * 1000:.0f} ms per sequential call (OHTTP), {TOR} s (Tor)"),
-    ("Hide the origin and the content", "RPC reads of balance, nonce, code and token state for a known address. anon-RPC now; PIR for the reads that run on open.",
-     f"{PIR} s p50 and about 760 KB upload per PIR lookup"),
-]
-
-
-def lane(r) -> int:
-    t = CAT_TECH.get(r["category"])
-    if r["category"] == "Bot challenge" or t in ("static", "rpc_public"):
-        return 0 if r["tier"] < 2 or t == "rpc_public" else 1
-    if t in ("telemetry", "rpc_sanctions") or r["category"] == "IP geolocation":
-        return 1
-    if t == "rpc_read":
-        return 3
-    return 2 if t or r["tier"] >= 2 else 0
-
-
-def routing(reqs) -> str:
-    n = len(reqs)
-    rows = []
-    for i, (name, what, cost) in enumerate(LANES):
-        rs = [r for r in reqs if lane(r) == i]
-        sens = sum(1 for r in rs if r["tier"] >= 2)
-        cats = Counter(r["category"] for r in rs).most_common(4)
-        rows.append(f'<tr><td><b>{esc(name)}</b><div class="sub">{esc(what)}</div></td>'
-                    f'<td class=num>{num(len(rs))}<div class=sub>{pct(len(rs), n)}</div></td><td class=num>{num(sens)}</td>'
-                    f'<td class=sub>{esc(", ".join(f"{c} {num(k)}" for c, k in cats))}</td><td>{esc(cost)}</td></tr>')
-    return "".join(rows)
 
 
 def bucket(r) -> str:
@@ -492,7 +457,6 @@ def main():
     m = json.loads((Path(args.mainnet) / "analysis.json").read_text()) if args.mainnet else None
 
     reqs = [r for r in a["requests"] if not r["preflight"]]
-    pre = [r for r in a["requests"] if r["preflight"]]
     flows = load_flows(args.sepolia)
     dur_min = (max(r["t"] for r in reqs) - a["t0"]) / 60
     sens = [r for r in reqs if r["tier"] >= 2]
@@ -501,13 +465,7 @@ def main():
     to_safe_other = sum(1 for r in sens if r["operator"] == "Safe") - to_backend - to_rpc
     to_custom = sum(1 for r in sens if r["operator"] == "Custom RPC (user-set)")
     to_third = len(sens) - to_backend - to_rpc - to_safe_other - to_custom
-    third_ops = sorted({r["operator"] for r in reqs if r["operator"] not in ("Safe", "Custom RPC (user-set)")})
-    third_addr = sorted({r["operator"] for r in sens if r["operator"] not in ("Safe", "Custom RPC (user-set)")})
-    idle = [r for r in reqs if r["step"] == "idle_home"]
     idle_win = next((w for w in a["windows"] if w["name"] == "idle_home"), None)
-    idle_rpm = len(idle) / ((idle_win["t1"] - idle_win["t0"]) / 60) if idle_win else 0
-    ga = [r for r in reqs if r["operator"] == "Google Analytics" and r["category"] == "Analytics"]
-    ga_addr = [r for r in ga if r["tier"] >= 2]
 
     # Latency projection for interactive steps.
     proj = []
@@ -526,13 +484,8 @@ def main():
             rs.append(r)
         if not rs:
             continue
-        backend = [r for r in rs if r["host"] in ("safe-client.safe.global", "api.safe.global") or r["operator"] == "CoW Protocol"]
-        rpc = [r for r in rs if r not in backend]
         d_all = dep_depth(rs)
-        proj.append({
-            "step": s, "n": len(rs), "depth": d_all,
-            "tor_all": d_all * TOR, "mixed": dep_depth(backend) * OHTTP + dep_depth(rpc) * TOR,
-        })
+        proj.append({"step": s, "n": len(rs), "depth": d_all, "tor_all": d_all * TOR})
 
     tc = Counter(r["tier"] for r in reqs)
     inv = inventory(a)
@@ -549,7 +502,7 @@ def main():
                        f"{cr_saferpc} still went to Safe's RPC ({', '.join(f'{k.replace("RPC: ", "")} {v}' for k, v in cr_saferpc_m.most_common(3))}), "
                        f"and {cr_backend} address-linked reads went to the Safe backend. The setting replaces the chain RPC only.")
 
-    mainnet_html, mainnet_body = "", "<p>No mainnet pass in this run.</p>"
+    mainnet_body = "<p>No mainnet pass in this run.</p>"
     if m:
         mreqs = [r for r in m["requests"] if not r["preflight"]]
         s_pairs = {(r["operator"], r["category"]) for r in reqs}
@@ -559,14 +512,6 @@ def main():
         mainnet_body = (f"<p>A read-only pass on mainnet watched a public Safe (<code>{esc(m['safe'][:10])}…</code>): {num(len(mreqs))} requests, "
                         f"{num(len(msens))} of them address-linked. Hosts that appeared on mainnet and not on Sepolia:</p>"
                         f'<div class="scroll"><table class="mini"><thead><tr><th>Operator</th><th>Service</th><th class=num>Requests</th></tr></thead><tbody>{rows or "<tr><td colspan=3>None</td></tr>"}</tbody></table></div>')
-        mainnet_html = f"""
-<section id="mainnet">
-<div class="eyebrow">Mainnet pass</div>
-<h2>{f"Mainnet adds {len({o for o, _ in new})} hosts the Sepolia run never contacted" if new else "Mainnet adds no new receivers"}</h2>
-<p>A read-only pass on mainnet watched a public Safe (<code>{esc(m['safe'][:10])}…</code>) with an unfunded signer connected:
-{num(len(mreqs))} requests, {num(len(msens))} of them address-linked. These operator and service pairs appeared on mainnet and not in the Sepolia journey:</p>
-<div class="scroll"><table class="mini"><thead><tr><th>Operator</th><th>Service</th><th class=num>Requests</th></tr></thead><tbody>{rows or '<tr><td colspan=3>None</td></tr>'}</tbody></table></div>
-</section>"""
 
     inv_rows = []
     for r in inv:
@@ -591,60 +536,17 @@ def main():
 
     proj_rows = "".join(
         f'<tr><td>{esc(STEP_LABELS.get(x["step"], x["step"]))}</td><td class=num>{x["n"]}</td>'
-        f'<td class=num>{x["depth"]}</td><td class=num>+{x["tor_all"]:.0f} s</td><td class=num>+{x["mixed"]:.1f} s</td></tr>' for x in proj)
+        f'<td class=num>{x["depth"]}</td><td class=num>+{x["tor_all"]:.1f} s</td></tr>' for x in proj)
 
     fails = [s for s in a["steps"] if not s["ok"]]
     fail_note = (" Steps that did not complete: " + ", ".join(esc(STEP_LABELS.get(s["name"], s["name"])) for s in fails) + ".") if fails else ""
 
-    findings, recs, recs_title = narrative(a, reqs, sens, idle_win, ga, ga_addr)
     acts, covered = actions(reqs, sens, idle_win)
-    lanes_n = Counter(lane(r) for r in reqs)
-    by_step = Counter(r["step"] for r in reqs if r["step"] in {w["name"] for w in a["windows"]})
-    top_step, top_n = by_step.most_common(1)[0]
-    who_top = [o for o, c in sorted(mat, key=lambda oc: -oc[1]["Safe address"])[:2]]
     gap = idle_gap(reqs, idle_win)
-    lo = min((x["tor_all"] for x in proj), default=0); hi = max((x["tor_all"] for x in proj), default=0)
-    mlo = min((x["mixed"] for x in proj), default=0); mhi = max((x["mixed"] for x in proj), default=0)
-    titles = {
-        "WHERE_T": f"{pct(to_backend, len(sens))} of address-linked requests go to Safe's backend, {pct(to_rpc, len(sens))} to its RPC",
-        "ROUTING_T": f"{pct(lanes_n[0] + lanes_n[1], len(reqs))} can stay plain or be removed; {pct(lanes_n[2], len(reqs))} need the origin hidden, {pct(lanes_n[3], len(reqs))} the content too",
-        "WHO_T": f"{who_top[0].replace('Safe backend', 'The Safe backend')} and {who_top[1]} see the Safe address most often" if len(who_top) == 2 else "Who learns what",
-        "SESSION_T": f"The app keeps sending the Safe address while idle, a burst every {gap:.0f} s" if gap else "The session, request by request",
-        "ACTIONS_T": f"{STEP_LABELS.get(top_step, top_step).split(' (')[0]} sends the most requests: {num(top_n)}",
-        "INV_T": "Every endpoint, sorted by what it reveals",
-        "LAT_T": f"Hiding the origin adds {lo:.0f} to {hi:.0f} s per action over Tor, {mlo:.0f} to {mhi:.0f} s with a relay for the backend",
-        "RECS_T": recs_title,
-    }
-    page = TEMPLATE.replace("{{FINDINGS}}", findings).replace("{{RECS}}", recs)
-    for k, v in ({
-        "RUN": esc(a["run"]), "DUR": f"{dur_min:.0f}", "N": num(len(reqs)), "NPRE": num(len(pre)),
-        "OPS": str(len(third_ops)), "OPLIST": esc(", ".join(third_ops)),
-        "SENS": num(len(sens)), "SENSPCT": pct(len(sens), len(reqs)),
-        "BACKEND": pct(to_backend, len(sens)), "RPC": pct(to_rpc, len(sens)), "SAFEOTHER": pct(to_safe_other, len(sens)),
-        "THIRD": pct(to_third, len(sens)), "NBACKEND": num(to_backend), "NRPC": num(to_rpc),
-        "NSAFEOTHER": num(to_safe_other), "NTHIRD": num(to_third), "CUSTOMPCT": pct(to_custom, len(sens)), "NCUSTOM": num(to_custom),
-        "FB": str(to_backend), "FR": str(to_rpc), "FS": str(to_safe_other), "FT": str(to_third), "FC": str(max(to_custom, 0)),
-        "THIRDADDR": esc(", ".join(third_addr) or "none"), "NTHIRDADDR": str(len(third_addr)),
-        "IDLERPM": f"{idle_rpm:.0f}", "GA": str(len(ga)), "GAADDR": str(len(ga_addr)),
-        "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a), "LATSVG": svg_latency(proj), "UNITS": svg_units(reqs), "REPRO": repro_html("Run it yourself"), "LEGEND": legend(),
-        "ROUTING": routing(reqs), "BREAKDOWN": breakdown(sens, flows, a.get("known_values")), "RAILMAINNET": '<li><a href="#mainnet" data-rail="mainnet"><span class="tick"></span><span class="label">Mainnet pass</span></a></li>' if m else "", "BACK": esc(args.back),
-        "DATE": time.strftime("%Y-%m-%d", time.gmtime(a["t0"])), "NSTEPS": str(len(a["windows"])), "INV": "".join(inv_rows), "MATRIX": "".join(mat_rows), "PROJ": proj_rows,
-        "CUSTOM": esc(custom_note), "MAINNET": mainnet_html, "FAILS": fail_note,
-        "COOKIES": "necessary only" if a.get("cookies") == "necessary" else "accept all",
-        "TOR": f"{TOR}", "WINDOW": str(WINDOW), "TORJS": f"{TORJS}", "PIR": f"{PIR}", "OHTTP": f"{OHTTP * 1000:.0f}",
-        "TIERHELP": "".join(
-            f'<li><span><i class="sw t{t}"></i><b>{esc(TIER_NAMES[t])}.</b> {esc(TIER_HELP[t])}</span>'
-            f'<span class="n">{num(tc[t])} requests</span></li>' for t in range(4)),
-        "STEPKEY": "".join(f'<li data-step="{i}"><b>{i + 1}</b> {esc(STEP_LABELS.get(w["name"], w["name"]))}</li>' for i, w in enumerate(a["windows"])),
-    } | titles).items():
-        page = page.replace("{{" + k + "}}", v)
-    out = Path(args.out) if args.out else Path(args.site) / "runs" / a["run"] / "index.html"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(page.replace("{{OTHER}}", "brief.html").replace("{{OTHERLBL}}", "Short brief"))
-    print("wrote", out)
-
-    # The brief: same data, one screen of argument, evidence in an appendix.
-    groups = [("Remove, or do it locally", "No added latency"), ("Hide the origin: anon-RPC or a relay", f"+{TOR} s per call over Tor, +{OHTTP * 1000:.0f} ms over a relay"), ("Hide the content: PIR", f"+{PIR} s per lookup")]
+    lo = min((x["tor_all"] for x in proj), default=0)
+    hi = max((x["tor_all"] for x in proj), default=0)
+    groups = [("Remove, or do it locally", "No added latency"), ("Hide the origin: anon-RPC", f"+{TOR} s per sequential call"),
+              ("Hide the content: PIR", f"+{PIR} s per lookup")]
     fix_html = []
     for gi, (gname, gcost) in enumerate(groups):
         rows = [x for x in acts if x[0] == gi]
@@ -653,36 +555,56 @@ def main():
         lis = "".join(
             f'<li><div class="leak">{leak}</div><div class="fix">{fix} <button type="button" class="readmore fmore" aria-expanded="false">more</button>'
             f'<span class="fdet why" hidden> {det}</span></div><div class="chips-row"><span class="tag">{esc(n)}</span>'
-            f'<span class="tag{" free" if c in ("No added latency", "Faster") else ""}">{esc(c)}</span></div></li>'
+            f'<span class="tag{" free" if c == "No added latency" else ""}">{esc(c)}</span></div></li>'
             for _, leak, fix, det, n, c in rows)
         fix_html.append(f'<h3>{esc(gname)} <span class="gcost">{esc(gcost)}</span></h3><ol class="acts">{lis}</ol>')
     free = sum(1 for x in acts if x[5] == "No added latency")
-    brief_vals = {
+    cover = "all " + num(len(sens)) if covered == len(sens) else pct(covered, len(sens)) + " of the"
+    vals = {
         "THESIS": f"{pct(len(sens), len(reqs))} of the requests ({num(len(sens))} of {num(len(reqs))}) tie the Safe or an owner address to the user's IP address: "
                   f"{pct(to_backend + to_rpc + to_safe_other, len(sens))} go to Safe's own services, {pct(to_third + to_custom, len(sens))} to third parties and the user's RPC. "
                   f"All of them need hiding, not only the {pct(to_rpc, len(sens))} on Safe's RPC. "
-                  f"The {len(acts)} changes below cover {'all ' + num(len(sens)) if covered == len(sens) else pct(covered, len(sens))}; {free} add no latency, the rest use anon-RPC, a relay or PIR.",
+                  f"The {len(acts)} changes below cover {cover.replace(' of the', '')}; {free} add no latency, the rest use anon-RPC or PIR.",
         "PICT_T": f"Safe's own services receive {pct(to_backend + to_rpc + to_safe_other, len(sens))} of the address-linked requests, third parties {pct(to_third, len(sens))}",
-        "FIX_T": f"{len(acts)} changes cover {'all ' + num(len(sens)) if covered == len(sens) else pct(covered, len(sens)) + ' of the'} address-linked requests; {free} add no latency",
-        "FIXES": "".join(fix_html),
-        "MAINBODY": mainnet_body,
-    }
-    brief = BRIEF_TEMPLATE
-    for k, v in (brief_vals | {
+        "FIX_T": f"{len(acts)} changes cover {cover} address-linked requests; {free} add no latency",
+        "LAT_T": f"Hiding the origin with anon-RPC adds an estimated {lo:.0f} to {hi:.0f} s per action",
+        "SESSION_T": f"The app keeps sending the Safe address while idle, a burst every {gap:.0f} s" if gap else "The session, request by request",
+        "FIXES": "".join(fix_html), "MAINBODY": mainnet_body,
         "RUN": esc(a["run"]), "DATE": time.strftime("%Y-%m-%d", time.gmtime(a["t0"])), "BACK": esc(args.back),
         "NSTEPS": str(len(a["windows"])), "DUR": f"{dur_min:.0f}", "LEGEND": legend(), "UNITS": svg_units(reqs),
-        "BREAKDOWN": breakdown(sens, flows, a.get("known_values")), "LATSVG": svg_latency(proj), "PROJ": proj_rows, "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a),
+        "BREAKDOWN": breakdown(sens, flows, a.get("known_values")), "LATSVG": svg_latency(proj), "PROJ": proj_rows,
+        "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a),
         "STEPKEY": "".join(f'<li data-step="{i}"><b>{i + 1}</b> {esc(STEP_LABELS.get(w["name"], w["name"]))}</li>' for i, w in enumerate(a["windows"])),
-        "MATRIX": "".join(mat_rows), "INV": "".join(inv_rows), "LAT_T": titles["LAT_T"], "SESSION_T": titles["SESSION_T"],
+        "MATRIX": "".join(mat_rows), "INV": "".join(inv_rows),
         "TIERHELP": "".join(f'<li><span><i class="sw t{t}"></i><b>{esc(TIER_NAMES[t])}.</b> {esc(TIER_HELP[t])}</span><span class="n">{num(tc[t])} requests</span></li>' for t in range(4)),
-        "TOR": f"{TOR}", "TORJS": f"{TORJS}", "PIR": f"{PIR}", "OHTTP": f"{OHTTP * 1000:.0f}", "WINDOW": str(WINDOW),
+        "TOR": f"{TOR}", "TORJS": f"{TORJS}", "PIR": f"{PIR}", "WINDOW": str(WINDOW), "FAILS": fail_note,
         "COOKIES": "necessary only" if a.get("cookies") == "necessary" else "accept all", "REPO": REPO, "CUSTOM": esc(custom_note),
-        "OTHER": "index.html", "OTHERLBL": "Full report",
-    }).items():
-        brief = brief.replace("{{" + k + "}}", v)
-    bout = out.parent / "brief.html"
-    bout.write_text(brief)
-    print("wrote", bout)
+    }
+
+    def render(full: bool) -> str:
+        page = TEMPLATE
+        for k, v in (vals | {
+            "H1": "Safe{Wallet} Egress Report" if full else "Safe{Wallet} Egress Brief",
+            "OTHER": "index.html" if full else "full.html", "OTHERLBL": "Short brief" if full else "Full report",
+        }).items():
+            page = page.replace("{{" + k + "}}", v)
+        if full:
+            # The full report is the same page with the appendix and the number tables open.
+            page = re.sub(r'(class="apx-body" id="[^"]+") hidden', r"\1", page)
+            page = page.replace('class="apx-toggle" aria-expanded="false"', 'class="apx-toggle" aria-expanded="true"')
+            page = page.replace('<div id="lat-table" hidden>', '<div id="lat-table">')
+            page = page.replace('data-show="lat-table">Show the numbers', 'data-show="lat-table">Hide the numbers')
+        return page
+
+    out = Path(args.out) if args.out else Path(args.site) / "runs" / a["run"] / "index.html"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(render(False))
+    (out.parent / "full.html").write_text(render(True))
+    if args.site:
+        # brief.html was the brief's address for one day; keep it working.
+        (out.parent / "brief.html").write_text('<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=index.html">'
+                                               '<title>Moved</title><a href="index.html">Moved to the run page</a>')
+    print("wrote", out, "and", out.parent / "full.html")
     if args.site:
         meta = {
             "run": a["run"], "date": time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(a["t0"])), "wallet": "Safe{Wallet} web",
@@ -722,14 +644,14 @@ def actions(reqs, sens, idle_win):
          "Requests to <code>pulse.walletconnect.org</code> carry a <code>did:key</code> client ID from the first page load.",
          "No added latency", lambda r: r["operator"] == "WalletConnect (Reown)"),
         (1, "Safe's backend links the IP address to the Safe address, including transaction content before signing.",
-         "Send backend calls through the anon-RPC transport (Tor), or an Oblivious HTTP relay where latency matters.",
+         "Send backend calls through the anon-RPC transport (Tor).",
          f"The idle app asks about the Safe every {idle_gap(reqs, idle_win):.0f} s, and preview and threat analysis send the full SafeTx before the user signs. "
-         "The Tor client that carries anon-RPC can carry these HTTPS calls too. With a relay run by a separate operator, "
-         "the relay sees the IP address and not the request; the backend sees the request and not the IP address. Polling less also lowers the number of samples.",
-         f"+{TOR} s Tor, +{OHTTP * 1000:.0f} ms relay", lambda r: r["operator"] == "Safe" and r["category"] in SAFE_BACKEND_CATS),
-        (1, "CoW's API links the Safe address, quotes and orders to the IP address.", "Send CoW API calls through the same anon-RPC transport or relay.",
+         "The Tor client that carries anon-RPC can carry these HTTPS calls too, so the backend sees the request and not the IP address. "
+         "Polling less also lowers the number of samples.",
+         f"+{TOR} s per sequential call", lambda r: r["operator"] == "Safe" and r["category"] in SAFE_BACKEND_CATS),
+        (1, "CoW's API links the Safe address, quotes and orders to the IP address.", "Send CoW API calls through the same anon-RPC transport.",
          "Quotes, order submission, order tracking, notifications and the balance watcher all name the Safe.",
-         f"+{TOR} s Tor, +{OHTTP * 1000:.0f} ms relay", lambda r: r["operator"] == "CoW Protocol" and not is_rpc(r) and not r["category"].startswith("Swap: order history")),
+         f"+{TOR} s per sequential call", lambda r: r["operator"] == "CoW Protocol" and not is_rpc(r) and not r["category"].startswith("Swap: order history")),
         (1, "ENS reverse lookups send the owner addresses to an RPC.", "Resolve names over anon-RPC and cache the results.",
          "On Sepolia these lookups still go to Safe's mainnet RPC. Names change rarely; a PIR name index can replace the lookup later.",
          f"+{TOR} s per lookup", lambda r: r["category"] == "RPC: name resolution (ENS)"),
@@ -761,92 +683,6 @@ def idle_gap(reqs, idle_win) -> float:
     return statistics.median(gaps) if idle_win and gaps else 0
 
 
-def narrative(a, reqs, sens, idle_win, ga, ga_addr):
-    from urllib.parse import parse_qs
-    F, R = [], []
-    by_cat = Counter(r["category"] for r in reqs)
-    n_cat = lambda *cs: sum(by_cat[c] for c in cs)
-    # 1. Analytics with consent declined
-    if ga:
-        F.append(("Google Analytics receives the Safe address and the owner address with analytics declined.",
-                  f"{len(ga)} analytics requests went to Google with consent mode set to denied. {len(ga_addr)} of them carry an address: "
-                  "the event parameter <code>ep.safeAddress</code>, the user property <code>up.walletAddress</code> with the connected signer, "
-                  "and the page URL in <code>dl</code>, which holds <code>?safe=</code>. Declining removes cookies, not the data."))
-        R.append(("Stop analytics when consent is declined, and drop addresses from events and page URLs.",
-                  f"Removes {len(ga_addr)} address-linked requests to a third party.", f"{num(len(ga_addr))} requests", "No added latency"))
-    pages = [r for r in reqs if r["operator"] == "Safe" and CAT_TECH.get(r["category"]) == "static" and r["tier"] >= 2]
-    if pages:
-        R.append(("Keep the Safe address out of the URLs the browser fetches.",
-                  f"{len(pages)} requests for page code and data carried <code>?safe=</code> to the web host. Holding the address in client state, or in the URL fragment, keeps it on the device.", f"{num(len(pages))} requests", "No added latency"))
-    # 2. Backend polling
-    idle = sorted(r["t"] for r in reqs if r["step"] == "idle_home" and r["category"] == "Account state")
-    if idle_win and len(idle) > 3:
-        per_min = len(idle) / ((idle_win["t1"] - idle_win["t0"]) / 60)
-        F.append(("The Safe backend links the IP address to the Safe address continuously while the app is open.",
-                  f"On an idle home screen the app sent {per_min:.0f} account-state requests per minute (Safe info, balances, queue, history), "
-                  f"about one burst every {idle_gap(reqs, idle_win):.0f} s. Each carries the Safe address in the URL."))
-        R.append(("Put an Oblivious HTTP relay, run by a separate operator, in front of the Safe backend.",
-                  f"The relay sees the IP address and not the request; the backend sees the request and not the IP address. "
-                  f"Covers the {sum(1 for r in sens if r['host'] in ('safe-client.safe.global', 'api.safe.global'))} backend requests, which are the largest share. "
-                  f"Adds one relay hop per sequential request, estimated at {OHTTP * 1000:.0f} ms. This answers the concern that anon-RPC alone is partial for a backend-heavy wallet.",
-                  f"{num(sum(1 for r in sens if r['host'] in ('safe-client.safe.global', 'api.safe.global')))} requests", f"+{OHTTP * 1000:.0f} ms per call"))
-        R.append(("Poll less, and only when something changed.",
-                  "Poll the Safe info endpoint only, fetch balances and history when its tags change, and back off when the tab is hidden. "
-                  "Fewer samples give an observer fewer IP-to-address links and less timing.", f"{per_min:.0f} per minute idle", "No added latency"))
-    # 3. Mainnet RPC lookups on a testnet session
-    ens = [r for r in reqs if r["category"] == "RPC: name resolution (ENS)"]
-    sanc = [r for r in reqs if r["category"] == "RPC: sanctions screening"]
-    if ens or sanc:
-        F.append(("Owner and Safe addresses go to Safe's mainnet RPC during a Sepolia session.",
-                  f"{len(sanc)} requests call the Chainalysis sanctions oracle (<code>isSanctioned</code>) for the Safe and its signers, and "
-                  f"{len(ens)} requests do ENS reverse lookups, both on <code>rpc.safe.global/1</code>. A custom RPC does not change this path."))
-        R.append(("Check sanctions over PIR or against a local copy, and resolve names over anon-RPC.",
-                  f"Removes {len(sanc)} sanctions requests outright and moves {len(ens)} name lookups to the path the user picked. Local checks are faster than a round trip.", f"{num(len(sanc) + len(ens))} requests", "Faster"))
-    # 4. Intent before chain
-    scan = [r for r in reqs if r["category"] in ("Tx security scan", "Tx preview & simulation")]
-    prop = [r for r in reqs if r["category"] == "Tx proposal & signatures"]
-    if scan:
-        F.append(("Transaction content reaches the backend before the user signs.",
-                  f"{len(scan)} preview and threat-analysis requests send the full SafeTx (recipient, value, calldata) as typed data, keyed by the Safe address. "
-                  f"{len(prop)} proposal request{"s then send" if len(prop) != 1 else " then sends"} the signature. This content has to reach a server to be useful, so only the origin can be hidden."))
-    # 5. CoW widget fan-out
-    cow = [r for r in reqs if r["operator"] == "CoW Protocol"]
-    hist = [r for r in a["requests"] if r["category"].startswith("Swap: order history")]
-    geo = [r for r in reqs if r["category"] == "IP geolocation"]
-    sentry = [r for r in reqs if r["operator"] == "Sentry"]
-    if cow:
-        hosts = sorted({r["host"] for r in cow})
-        F.append(("Opening Swap sends the Safe address to CoW Protocol for 12 chains on two environments.",
-                  f"The embedded widget made {len(cow)} requests to {len(hosts)} CoW hosts, including {len(hist)} order-history requests and preflights "
-                  "for the Safe address on 12 networks against both <code>api.cow.fi</code> and <code>barn.api.cow.fi</code>. "
-                  f"It also looked up the user's IP address and country at <code>api.country.is</code> ({len(geo)} request{"s" if len(geo) != 1 else ""}), loaded a Cloudflare Turnstile check, "
-                  f"and reported to Sentry ({sum(1 for r in sentry if r['tier'] >= 2)} of {len(sentry)} reports carry the Safe address) and LaunchDarkly."))
-        R.append(("Have the CoW widget query only the active chain and environment, and geolocate server-side.",
-                  f"Cuts most of the {len(hist)} order-history requests and removes a third party that returns the user's IP address to the page.", f"{num(len(hist))} requests", "No added latency"))
-    # 6. WalletConnect telemetry
-    wc = [r for r in reqs if r["operator"] == "WalletConnect (Reown)" and r["category"] == "Analytics"]
-    if wc:
-        F.append(("The WalletConnect SDK reports to Reown even when WalletConnect is not used.",
-                  f"{len(wc)} requests to <code>pulse.walletconnect.org</code> carry a persistent <code>did:key</code> client ID from the first page load."))
-        R.append(("Load the WalletConnect SDK only when the user picks WalletConnect.",
-                  f"Removes {len(wc)} telemetry requests and a persistent client ID from sessions that use an injected wallet.", f"{num(len(wc))} requests", "No added latency"))
-    # 7. Content privacy for RPC reads
-    reads = [r for r in reqs if r["category"] == "RPC: account & contract reads" and r["tier"] >= 2]
-    if reads:
-        R.append(("Add anon-RPC for the origin and PIR for balance, nonce and code reads.",
-                  f"{len(reads)} RPC reads carried an address. Over Tor each sequential read adds about {TOR} s; a PIR balance lookup costs about {PIR} s and "
-                  "760 KB upload, so PIR fits the few reads the wallet needs on open, not polling.", f"{num(len(reads))} requests", f"+{PIR} s per PIR lookup"))
-    fh = '<ol class="findings">' + "".join(
-        f'<li>{t} <button type="button" class="readmore fmore" aria-expanded="false">more</button><span class="fdet" hidden> {d}</span></li>' for t, d in F) + "</ol>"
-    rh = '<ol class="recs">' + "".join(
-        f'<li><div class="what">{t} <button type="button" class="readmore fmore" aria-expanded="false">more</button><span class="fdet why" hidden> {d}</span></div>'
-        f'<div class="chips-row"><span class="tag">{esc(n)}</span><span class="tag{" free" if c in ("No added latency", "Faster") else ""}">{esc(c)}</span></div></li>'
-        for t, d, n, c in R) + "</ol>"
-    free = sum(1 for *_, c in R if c in ("No added latency", "Faster"))
-    title = f"{len(R)} changes; {free} of them add no latency"
-    return fh, rh, title
-
-
 REPO = "https://github.com/andyguzmaneth/wallet-egress-lab"
 REPRO_CMDS = """git clone https://github.com/andyguzmaneth/wallet-egress-lab && cd wallet-egress-lab
 npm install && npx playwright install chromium && uv tool install mitmproxy
@@ -862,15 +698,14 @@ def repro_html(heading: str) -> str:
 </section>"""
 
 
-TEMPLATE = (Path(__file__).parent / "template.html").read_text()
 INDEX_TEMPLATE = (Path(__file__).parent / "index.html").read_text()
-BRIEF_TEMPLATE = (Path(__file__).parent / "template-brief.html").read_text()
+TEMPLATE = (Path(__file__).parent / "template.html").read_text()
 
 
 def build_index(site: Path):
     metas = sorted((json.loads(f.read_text()) for f in site.glob("runs/*/meta.json")), key=lambda m: m["run"], reverse=True)
     rows = "".join(
-        f'<tr><td><a href="runs/{esc(x["run"])}/index.html">{esc(x["date"])}</a><div class=sub>{esc(x["run"])} · <a href="runs/{esc(x["run"])}/brief.html">brief</a></div></td>'
+        f'<tr><td><a href="runs/{esc(x["run"])}/index.html">{esc(x["date"])}</a><div class=sub>{esc(x["run"])} · <a href="runs/{esc(x["run"])}/full.html">full report</a></div></td>'
         f'<td>{esc(x["wallet"])}<div class=sub>{esc(x["plan"])}</div></td><td class=num>{x["minutes"]} min</td>'
         f'<td class=num>{num(x["requests"])}</td><td class=num>{num(x["linked"])}<div class=sub>{esc(x["linked_pct"])}</div></td>'
         f'<td class=num>{esc(x["backend_pct"])}</td><td class=num>{esc(x["rpc_pct"])}</td>'
