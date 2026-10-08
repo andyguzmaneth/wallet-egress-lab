@@ -563,7 +563,7 @@ def main():
     vals = {
         "THESIS": f"{pct(len(sens), len(reqs))} of the requests ({num(len(sens))} of {num(len(reqs))}) tie the Safe or an owner address to the user's IP address: "
                   f"{pct(to_backend + to_rpc + to_safe_other, len(sens))} go to Safe's own services, {pct(to_third + to_custom, len(sens))} to third parties and the user's RPC. "
-                  f"All of them need hiding, not only the {pct(to_rpc, len(sens))} on Safe's RPC. "
+                  "All of them need hiding. "
                   f"The {len(acts)} changes below cover {cover.replace(' of the', '')}; {free} add no latency, the rest use anon-RPC or PIR.",
         "PICT_T": f"Safe's own services receive {pct(to_backend + to_rpc + to_safe_other, len(sens))} of the address-linked requests, third parties {pct(to_third, len(sens))}",
         "FIX_T": f"{len(acts)} changes cover {cover} address-linked requests; {free} add no latency",

@@ -195,6 +195,8 @@ svg .band.hl { fill: color-mix(in srgb, var(--t2) 14%, transparent); }
 svg .stepdot.hl { fill: var(--t2); stroke: var(--t2); } svg .steplbl.hl { fill: #fff; } svg .steptick.hl { stroke: var(--t2); opacity: 1; }
 svg .lblbg { fill: var(--surface-0); } svg .steplbl { pointer-events: none; } svg .stepdot { cursor: pointer; }
 
+.insight { margin: 18px 0 10px; padding-left: 16px; border-left: 3px solid var(--accent); }
+.insight .thesis { margin: 0; }
 .thesis { font-family: Georgia, "Times New Roman", serif; font-size: 22px; line-height: 1.4; color: var(--text-primary); max-width: 860px; margin: 10px 0 8px; text-wrap: pretty; }
 .methodline { color: var(--text-muted); font-size: 13.5px; margin: 0; }
 .acts { list-style: none; padding: 0; margin: 4px 0 0; counter-reset: a; }
@@ -239,7 +241,8 @@ mark.m-ctx { background: none; outline: 1.5px solid var(--text-muted); }
 <header>
   <div class="kicker"><a class="back" href="{{BACK}}">All runs</a> · Safe{Wallet} web · Sepolia · {{DATE}} · <a href="{{OTHER}}">{{OTHERLBL}}</a></div>
   <h1>{{H1}}</h1>
-  <p class="thesis">{{THESIS}}</p>
+  <div class="insight"><div class="eyebrow">Summary</div>
+  <p class="thesis">{{THESIS}}</p></div>
   <p class="methodline">One scripted user, {{NSTEPS}} actions on Sepolia, {{DUR}} minutes, every request recorded at a proxy. <a href="#apx-method">Method</a></p>
 </header>
 
