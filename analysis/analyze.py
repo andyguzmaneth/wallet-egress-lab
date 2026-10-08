@@ -157,6 +157,8 @@ def category(rec: dict) -> str:
             return "Account state"
         return "Config & metadata"
     if op == "CoW Protocol":
+        if STATIC_RE.search(path):
+            return "App code & assets"
         if re.search(r"/account/0x[0-9a-fA-F]{40}/orders", path):
             return "Swap: order history (12 chains x 2 envs)"
         if host.startswith("balances-watcher"):
