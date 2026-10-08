@@ -1,0 +1,15 @@
+{
+  "run": "20261008T150313Z-sepolia",
+  "date": "2026-10-08 15:03 UTC",
+  "wallet": "Safe{Wallet} web",
+  "plan": "Sepolia journey + mainnet read-only pass",
+  "minutes": 14,
+  "requests": 2056,
+  "linked": 860,
+  "linked_pct": "42%",
+  "steps_ok": 17,
+  "steps": 17,
+  "backend_pct": "52%",
+  "rpc_pct": "13%",
+  "cookies": "necessary"
+}
