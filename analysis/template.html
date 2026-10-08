@@ -102,7 +102,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .recs li:before { content: counter(r); font-weight: 650; color: var(--accent); }
 .recs .what { font-weight: 600; }
 .recs .why { grid-column: 2; color: var(--text-secondary); font-size: 14px; }
-.mini { max-width: 680px; }
+.mini { max-width: 680px; }\n.routing td { vertical-align: top; } .routing td:first-child { min-width: 220px; width: 38%; } .routing td:nth-child(4) { min-width: 200px; }
 code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .tip { position: fixed; pointer-events: none; background: var(--text-primary); color: var(--surface-1); font-size: 12px; padding: 6px 8px; border-radius: 6px; max-width: 420px; z-index: 9; display: none; }
 .theme { position: absolute; top: 16px; right: 16px; font: inherit; font-size: 12px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
@@ -112,6 +112,10 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
   .tierhelp { grid-template-columns: 1fr; }
   .stepkey { columns: 1; }
   h1 { font-size: 24px; }
+  .kicker { padding-right: 72px; }
+  .split { flex-direction: column; }
+  .seg { flex: none !important; min-width: 0; }
+  .mini td:first-child { white-space: normal; word-break: break-all; }
 }
 @media print { .theme, .chips { display: none; } section { break-inside: avoid; } }
 </style>
@@ -148,6 +152,15 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
     <div class="seg t0 ink-dark" style="flex:{{FC}}; opacity:.6"><b>Custom RPC</b> {{CUSTOMPCT}}<div class="sub">{{NCUSTOM}}</div></div>
   </div>
   <p class="sub">Widths are proportional. "Safe web app" counts page loads whose URL holds <code>?safe=</code>. "Custom RPC" is the node the user set in step 15.</p>
+</section>
+
+<section>
+  <h2>Routing plan: what can stay plain, what needs anon-RPC, what needs PIR</h2>
+  <p>Each request in the session, sorted by the cheapest treatment that removes the address-to-IP link. The Safe backend carries most address-linked traffic, so an origin-hiding relay in front of the backend API does more than anon-RPC on the RPC path alone.</p>
+  <div class="scroll"><table class="routing">
+    <thead><tr><th>Treatment</th><th class=num>Requests</th><th class=num>Address-linked</th><th>Largest services</th><th>Added latency</th></tr></thead>
+    <tbody>{{ROUTING}}</tbody>
+  </table></div>
 </section>
 
 <section>

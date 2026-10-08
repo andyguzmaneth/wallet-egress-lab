@@ -71,13 +71,21 @@ async function waitUntil(cond: () => boolean, ms: number, msg: string) {
 
 async function solveTurnstile() {
   const f = cow();
-  if (!(await f.getByText("Click the checkbox").count())) return;
-  const ts = f.locator('iframe[src*="challenges.cloudflare.com"]').first();
-  const box = await ts.boundingBox().catch(() => null);
-  const holder = box ?? await f.getByText("Verify you are human").first().boundingBox();
-  if (!holder) throw new Error("turnstile not located");
-  await page.mouse.click(holder.x + (box ? 30 : 10), holder.y + holder.height / 2);
-  await f.getByText("Click the checkbox").waitFor({ state: "detached", timeout: 30000 }).catch(() => {});
+  const gate = f.getByText("Click the checkbox");
+  for (let i = 0; i < 3 && (await gate.count()); i++) {
+    // The Turnstile iframe can sit in a closed shadow root, so find it through page.frames().
+    const ts = page.frames().find((fr) => fr.url().includes("challenges.cloudflare.com"));
+    let box = ts ? await (await ts.frameElement()).boundingBox().catch(() => null) : null;
+    if (!box) {
+      // Fallback: the widget sits directly above the "Click the checkbox" button.
+      const b = await gate.first().boundingBox({ timeout: 5000 });
+      if (!b) throw new Error("turnstile not located");
+      box = { x: b.x, y: b.y - 80, width: b.width, height: 65 };
+    }
+    await page.mouse.click(box.x + 21, box.y + box.height / 2);
+    await gate.first().waitFor({ state: "detached", timeout: 20000 }).catch(() => {});
+  }
+  if (await gate.count()) throw new Error("turnstile not solved");
   await wait(3000);
 }
 
@@ -233,6 +241,11 @@ if (plan === "baseline") {
     await page.goto(`${APP}/home?safe=sep:${safe}`, { waitUntil: "domcontentloaded" });
     await wait(60000);
   }, 0);
+} else if (plan === "swap") {
+  // Swap steps only, on an existing Safe (SAFE=0x...). For testing the CoW flow.
+  await step("cold_load", async () => { await page.goto(`${APP}/home?safe=sep:${safe}`, { waitUntil: "domcontentloaded" }); }, 5000);
+  await step("connect_wallet", connect, 5000);
+  await step("swap_quote", async () => { await openCow(); await cowQuote(WETH_SEP, COW_SEP, "0.002"); }, 5000);
 } else if (plan === "mainnet") {
   safe = MAINNET_SAFE; state.safe = safe;
   await step("cold_load", async () => { await page.goto(`${APP}/welcome/accounts`, { waitUntil: "domcontentloaded" }); }, 15000);

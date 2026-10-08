@@ -188,6 +188,40 @@ def inventory(a):
     return rows
 
 
+LANES = [
+    ("Plain path", "Address-free code, config, prices and chain status. No change.", "none"),
+    ("Remove, or do it locally", "Telemetry without consent, IP geolocation, the Safe address in page URLs (keep it in the client), sanctions checks against a local copy of the public list.", "none; fewer round trips"),
+    ("Hide the origin", "Calls whose content must reach the server: Safe and CoW APIs, transaction preview and proposal, name lookups. OHTTP relay for the APIs, anon-RPC for RPC.",
+     f"about {OHTTP * 1000:.0f} ms per sequential call (OHTTP), {TOR} s (Tor)"),
+    ("Hide the origin and the content", "RPC reads of balance, nonce, code and token state for a known address. anon-RPC now; PIR for the reads that run on open.",
+     f"{PIR} s p50 and about 760 KB upload per PIR lookup"),
+]
+
+
+def lane(r) -> int:
+    t = CAT_TECH.get(r["category"])
+    if r["category"] == "Bot challenge" or t in ("static", "rpc_public"):
+        return 0 if r["tier"] < 2 or t == "rpc_public" else 1
+    if t in ("telemetry", "rpc_sanctions") or r["category"] == "IP geolocation":
+        return 1
+    if t == "rpc_read":
+        return 3
+    return 2 if t or r["tier"] >= 2 else 0
+
+
+def routing(reqs) -> str:
+    n = len(reqs)
+    rows = []
+    for i, (name, what, cost) in enumerate(LANES):
+        rs = [r for r in reqs if lane(r) == i]
+        sens = sum(1 for r in rs if r["tier"] >= 2)
+        cats = Counter(r["category"] for r in rs).most_common(4)
+        rows.append(f'<tr><td><b>{esc(name)}</b><div class="sub">{esc(what)}</div></td>'
+                    f'<td class=num>{len(rs)}<div class=sub>{pct(len(rs), n)}</div></td><td class=num>{sens}</td>'
+                    f'<td class=sub>{esc(", ".join(f"{c} {k}" for c, k in cats))}</td><td>{esc(cost)}</td></tr>')
+    return "".join(rows)
+
+
 def matrix(a):
     ops = defaultdict(lambda: Counter())
     for r in a["requests"]:
@@ -282,7 +316,7 @@ def main():
 <h2>What the mainnet pass adds</h2>
 <p>A read-only pass on mainnet watched a public Safe (<code>{esc(m['safe'][:10])}…</code>) with an unfunded signer connected:
 {len(mreqs)} requests, {len(msens)} of them address-linked. These operator and service pairs appeared on mainnet and not in the Sepolia journey:</p>
-<table class="mini"><thead><tr><th>Operator</th><th>Service</th><th class=num>Requests</th></tr></thead><tbody>{rows or '<tr><td colspan=3>None</td></tr>'}</tbody></table>
+<div class="scroll"><table class="mini"><thead><tr><th>Operator</th><th>Service</th><th class=num>Requests</th></tr></thead><tbody>{rows or '<tr><td colspan=3>None</td></tr>'}</tbody></table></div>
 </section>"""
 
     inv_rows = []
@@ -294,7 +328,7 @@ def main():
             f'<td class=num data-v="{r["n"]}">{r["n"]}{f"<div class=sub>+{r["preflight"]} preflight</div>" if r["preflight"] else ""}</td>'
             f'<td data-v="{r["tier"] * 100000 + r["mix"][r["tier"]]}">{mixbar(r["mix"])}</td>'
             f'<td>{"".join(f"<span class=tag>{esc(ID_SHORT[i])}</span>" for i in r["ids"]) or "<span class=sub>none</span>"}</td>'
-            f'<td class=num data-v="{r["p50"]}">{r["p50"]:.0f}<div class=sub>p95 {r["p95"]:.0f}</div></td>'
+            + (f'<td class=num data-v="{r["p50"]}">{r["p50"]:.0f}<div class=sub>p95 {r["p95"]:.0f}</div></td>' if r["p50"] else '<td class=num data-v="0"><span class=sub>stream</span></td>') +
             f'<td class=num data-v="{r["up"] + r["down"]}">{kb(r["up"])}<div class=sub>{kb(r["down"])} down</div></td>'
             f'<td class=tech>{esc(r["tech"])}</td></tr>')
 
@@ -327,7 +361,7 @@ def main():
         "THIRDADDR": esc(", ".join(third_addr) or "none"), "NTHIRDADDR": str(len(third_addr)),
         "IDLERPM": f"{idle_rpm:.0f}", "GA": str(len(ga)), "GAADDR": str(len(ga_addr)),
         "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a), "LEGEND": legend(),
-        "INV": "".join(inv_rows), "MATRIX": "".join(mat_rows), "PROJ": proj_rows,
+        "ROUTING": routing(reqs), "INV": "".join(inv_rows), "MATRIX": "".join(mat_rows), "PROJ": proj_rows,
         "CUSTOM": esc(custom_note), "MAINNET": mainnet_html, "FAILS": fail_note,
         "COOKIES": "necessary only" if a.get("cookies") == "necessary" else "accept all",
         "TOR": f"{TOR}", "WINDOW": str(WINDOW), "TORJS": f"{TORJS}", "PIR": f"{PIR}", "OHTTP": f"{OHTTP * 1000:.0f}",
@@ -352,10 +386,15 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
                   "and the page URL in <code>dl</code>, which holds <code>?safe=</code>. Declining removes cookies, not the data."))
         R.append(("Stop analytics requests when consent is declined, and drop addresses from events and page URLs in all cases.",
                   f"Removes {len(ga_addr)} address-linked requests to a third party. No latency cost."))
+    pages = [r for r in reqs if r["operator"] == "Safe" and CAT_TECH.get(r["category"]) == "static" and r["tier"] >= 2]
+    if pages:
+        R.append(("Keep the Safe address out of the URLs the browser fetches.",
+                  f"{len(pages)} requests for page code and data carried <code>?safe=</code> to the web host. Holding the address in client state, or in the URL fragment, keeps it on the device."))
     # 2. Backend polling
     idle = sorted(r["t"] for r in reqs if r["step"] == "idle_home" and r["category"] == "Account state")
     if idle_win and len(idle) > 3:
-        gaps = [b - a2 for a2, b in zip(idle, idle[1:]) if b - a2 > 1]
+        starts = [t for i, t in enumerate(idle) if i == 0 or t - idle[i - 1] > 3]
+        gaps = [b - a2 for a2, b in zip(starts, starts[1:])]
         per_min = len(idle) / ((idle_win["t1"] - idle_win["t0"]) / 60)
         F.append(("The Safe backend links the IP address to the Safe address continuously while the app is open.",
                   f"On an idle home screen the app sent {per_min:.0f} account-state requests per minute (Safe info, balances, queue, history), "
@@ -382,18 +421,19 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
     if scan:
         F.append(("Transaction content reaches the backend before the user signs.",
                   f"{len(scan)} preview and threat-analysis requests send the full SafeTx (recipient, value, calldata) as typed data, keyed by the Safe address. "
-                  f"{len(prop)} proposal request{"s" if len(prop) != 1 else ""} then send the signature. This content has to reach a server to be useful, so only the origin can be hidden."))
+                  f"{len(prop)} proposal request{"s then send" if len(prop) != 1 else " then sends"} the signature. This content has to reach a server to be useful, so only the origin can be hidden."))
     # 5. CoW widget fan-out
     cow = [r for r in reqs if r["operator"] == "CoW Protocol"]
     hist = [r for r in a["requests"] if r["category"].startswith("Swap: order history")]
     geo = [r for r in reqs if r["category"] == "IP geolocation"]
+    sentry = [r for r in reqs if r["operator"] == "Sentry"]
     if cow:
         hosts = sorted({r["host"] for r in cow})
         F.append(("Opening Swap sends the Safe address to CoW Protocol for 12 chains on two environments.",
                   f"The embedded widget made {len(cow)} requests to {len(hosts)} CoW hosts, including {len(hist)} order-history requests and preflights "
                   "for the Safe address on 12 networks against both <code>api.cow.fi</code> and <code>barn.api.cow.fi</code>. "
-                  f"It also looked up the user's IP address and country at <code>api.country.is</code> ({len(geo)} request), loaded a Cloudflare Turnstile check, "
-                  "and reported to Sentry and LaunchDarkly."))
+                  f"It also looked up the user's IP address and country at <code>api.country.is</code> ({len(geo)} request{"s" if len(geo) != 1 else ""}), loaded a Cloudflare Turnstile check, "
+                  f"and reported to Sentry ({sum(1 for r in sentry if r['tier'] >= 2)} of {len(sentry)} reports carry the Safe address) and LaunchDarkly."))
         R.append(("Ask the widget to query only the active chain and the production environment, and to geolocate server-side.",
                   f"Cuts most of the {len(hist)} order-history requests and removes a third party that returns the user's IP address to the page."))
     # 6. WalletConnect telemetry
@@ -401,7 +441,7 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
     if wc:
         F.append(("The WalletConnect SDK reports to Reown even when WalletConnect is not used.",
                   f"{len(wc)} requests to <code>pulse.walletconnect.org</code> carry a persistent <code>did:key</code> client ID from the first page load."))
-        R.append(("Initialise the WalletConnect SDK only when the user picks WalletConnect.",
+        R.append(("Initialize the WalletConnect SDK only when the user picks WalletConnect.",
                   f"Removes {len(wc)} telemetry requests and a persistent client ID from sessions that use an injected wallet."))
     # 7. Content privacy for RPC reads
     reads = [r for r in reqs if r["category"] == "RPC: account & contract reads" and r["tier"] >= 2]
