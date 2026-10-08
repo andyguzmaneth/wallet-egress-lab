@@ -596,7 +596,8 @@ def main():
     fails = [s for s in a["steps"] if not s["ok"]]
     fail_note = (" Steps that did not complete: " + ", ".join(esc(STEP_LABELS.get(s["name"], s["name"])) for s in fails) + ".") if fails else ""
 
-    findings, recs, recs_title, acts = narrative(a, reqs, sens, idle_win, ga, ga_addr)
+    findings, recs, recs_title = narrative(a, reqs, sens, idle_win, ga, ga_addr)
+    acts, covered = actions(reqs, sens, idle_win)
     lanes_n = Counter(lane(r) for r in reqs)
     by_step = Counter(r["step"] for r in reqs if r["step"] in {w["name"] for w in a["windows"]})
     top_step, top_n = by_step.most_common(1)[0]
@@ -655,12 +656,14 @@ def main():
             f'<span class="tag{" free" if c in ("No added latency", "Faster") else ""}">{esc(c)}</span></div></li>'
             for _, leak, fix, det, n, c in rows)
         fix_html.append(f'<h3>{esc(gname)} <span class="gcost">{esc(gcost)}</span></h3><ol class="acts">{lis}</ol>')
-    free = sum(1 for x in acts if x[5] in ("No added latency", "Faster"))
+    free = sum(1 for x in acts if x[5] == "No added latency")
     brief_vals = {
-        "THESIS": f"Hiding the IP on Safe's RPC covers {pct(to_rpc, len(sens))} of the requests that link a Safe to its owner; {pct(to_backend, len(sens))} go to Safe's backend. "
-                  f"anon-RPC or a relay for the backend, PIR for balances and sanctions, and {free} fixes that add no latency cover most of the rest.",
-        "PICT_T": f"{num(len(reqs))} requests in {dur_min:.0f} minutes; {num(len(sens))} carry the Safe or an owner address",
-        "FIX_T": f"{len(acts)} changes; {free} of them add no latency",
+        "THESIS": f"{pct(len(sens), len(reqs))} of the requests ({num(len(sens))} of {num(len(reqs))}) tie the Safe or an owner address to the user's IP address: "
+                  f"{pct(to_backend + to_rpc + to_safe_other, len(sens))} go to Safe's own services, {pct(to_third + to_custom, len(sens))} to third parties and the user's RPC. "
+                  f"All of them need hiding, not only the {pct(to_rpc, len(sens))} on Safe's RPC. "
+                  f"The {len(acts)} changes below cover {'all ' + num(len(sens)) if covered == len(sens) else pct(covered, len(sens))}; {free} add no latency, the rest use anon-RPC, a relay or PIR.",
+        "PICT_T": f"Safe's own services receive {pct(to_backend + to_rpc + to_safe_other, len(sens))} of the address-linked requests, third parties {pct(to_third, len(sens))}",
+        "FIX_T": f"{len(acts)} changes cover {'all ' + num(len(sens)) if covered == len(sens) else pct(covered, len(sens)) + ' of the'} address-linked requests; {free} add no latency",
         "FIXES": "".join(fix_html),
         "MAINBODY": mainnet_body,
     }
@@ -692,6 +695,65 @@ def main():
         build_index(Path(args.site))
 
 
+SAFE_BACKEND_CATS = {"Account state", "Targeted messaging", "Tx preview & simulation", "Tx security scan",
+                     "Tx proposal & signatures", "Security screening (Zodiac)"}
+
+
+def actions(reqs, sens, idle_win):
+    """The brief's fix list. Each row: group, leak, fix, detail, tag, cost, predicate over requests."""
+    is_rpc = lambda r: r["category"].startswith("RPC:")
+    rows = [
+        (0, "Google Analytics receives the Safe and owner addresses, with analytics declined.",
+         "Send nothing without consent; drop addresses from events and URLs.",
+         "Consent mode was set to denied, so Google drops cookies but still receives the event parameter <code>ep.safeAddress</code>, "
+         "the user property <code>up.walletAddress</code> and the page URL with <code>?safe=</code>.",
+         "No added latency", lambda r: r["operator"] == "Google Analytics"),
+        (0, "Page loads send the Safe address to Safe's web host in the URL.", "Keep the address in client state or the URL fragment.",
+         "Requests for page code and data carry <code>?safe=</code> in the query string, which the host and its CDN can log.",
+         "No added latency", lambda r: r["operator"] == "Safe" and CAT_TECH.get(r["category"]) == "static"),
+        (0, "Error reports to Sentry include the Safe address.", "Strip addresses before a report leaves the browser.",
+         "The CoW widget's Sentry reports carry the Safe address in breadcrumbs and URLs.",
+         "No added latency", lambda r: r["operator"] == "Sentry"),
+        (0, "The CoW widget asks about the Safe on 12 chains and two environments.", "Query the active chain and the production API only.",
+         "Order history is fetched for every supported chain on both <code>api.cow.fi</code> and <code>barn.api.cow.fi</code>. "
+         "The widget also looks up the user's IP address and country at <code>api.country.is</code>; that check can run server-side.",
+         "No added latency", lambda r: r["category"].startswith("Swap: order history")),
+        (0, "WalletConnect reports a persistent client ID although it is not used.", "Load the SDK only when the user picks WalletConnect.",
+         "Requests to <code>pulse.walletconnect.org</code> carry a <code>did:key</code> client ID from the first page load.",
+         "No added latency", lambda r: r["operator"] == "WalletConnect (Reown)"),
+        (1, "Safe's backend links the IP address to the Safe address, including transaction content before signing.",
+         "Send backend calls through the anon-RPC transport (Tor), or an Oblivious HTTP relay where latency matters.",
+         f"The idle app asks about the Safe every {idle_gap(reqs, idle_win):.0f} s, and preview and threat analysis send the full SafeTx before the user signs. "
+         "The Tor client that carries anon-RPC can carry these HTTPS calls too. With a relay run by a separate operator, "
+         "the relay sees the IP address and not the request; the backend sees the request and not the IP address. Polling less also lowers the number of samples.",
+         f"+{TOR} s Tor, +{OHTTP * 1000:.0f} ms relay", lambda r: r["operator"] == "Safe" and r["category"] in SAFE_BACKEND_CATS),
+        (1, "CoW's API links the Safe address, quotes and orders to the IP address.", "Send CoW API calls through the same anon-RPC transport or relay.",
+         "Quotes, order submission, order tracking, notifications and the balance watcher all name the Safe.",
+         f"+{TOR} s Tor, +{OHTTP * 1000:.0f} ms relay", lambda r: r["operator"] == "CoW Protocol" and not is_rpc(r) and not r["category"].startswith("Swap: order history")),
+        (1, "ENS reverse lookups send the owner addresses to an RPC.", "Resolve names over anon-RPC and cache the results.",
+         "On Sepolia these lookups still go to Safe's mainnet RPC. Names change rarely; a PIR name index can replace the lookup later.",
+         f"+{TOR} s per lookup", lambda r: r["category"] == "RPC: name resolution (ENS)"),
+        (2, "Every balance refresh tells Safe's backend which Safe the user holds.", "Read balances and tokens with PIR instead.",
+         "A PIR lookup returns the same balances without the server learning which account was asked about.",
+         f"+{PIR} s per PIR lookup", lambda r: r["operator"] == "Safe" and r["category"] == "Account state" and "/balances" in r["path"]),
+        (2, "Sanctions checks send the Safe and owner addresses to Safe's mainnet RPC, even on Sepolia.", "Check the sanctions list over PIR, or against a local copy.",
+         "The checks call the Chainalysis oracle with <code>isSanctioned</code>. The list is public, so a local copy also works and adds no latency.",
+         f"+{PIR} s per PIR lookup", lambda r: r["category"] == "RPC: sanctions screening"),
+        (2, "RPC reads of balance, nonce, code and transaction status name the address, on Safe's RPC, CoW's nodes and a custom RPC alike.",
+         "anon-RPC for the origin; PIR for the reads made on open.",
+         f"Over Tor each sequential read adds about {TOR} s; a PIR balance lookup costs about {PIR} s and 760 KB upload, so PIR fits the reads made on open, not polling.",
+         f"+{TOR} s Tor, +{PIR} s PIR", lambda r: is_rpc(r) and r["category"] not in ("RPC: name resolution (ENS)", "RPC: sanctions screening")),
+    ]
+    out, covered = [], set()
+    for g, leak, fix, det, cost, pred in rows:
+        mine = [r for r in sens if pred(r)]
+        if not mine:
+            continue
+        covered |= {id(r) for r in mine}
+        out.append((g, leak, fix, det, f"{num(len(mine))} address-linked", cost))
+    return out, len(covered)
+
+
 def idle_gap(reqs, idle_win) -> float:
     idle = sorted(r["t"] for r in reqs if r["step"] == "idle_home" and r["category"] == "Account state")
     starts = [t for i, t in enumerate(idle) if i == 0 or t - idle[i - 1] > 3]
@@ -701,7 +763,7 @@ def idle_gap(reqs, idle_win) -> float:
 
 def narrative(a, reqs, sens, idle_win, ga, ga_addr):
     from urllib.parse import parse_qs
-    F, R, A = [], [], []   # findings, recommendations, actions (leak -> fix) for the brief
+    F, R = [], []
     by_cat = Counter(r["category"] for r in reqs)
     n_cat = lambda *cs: sum(by_cat[c] for c in cs)
     # 1. Analytics with consent declined
@@ -710,14 +772,10 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
                   f"{len(ga)} analytics requests went to Google with consent mode set to denied. {len(ga_addr)} of them carry an address: "
                   "the event parameter <code>ep.safeAddress</code>, the user property <code>up.walletAddress</code> with the connected signer, "
                   "and the page URL in <code>dl</code>, which holds <code>?safe=</code>. Declining removes cookies, not the data."))
-        A.append((0, "Google Analytics gets the Safe and owner address with analytics declined.", "Send nothing without consent; drop addresses from events and URLs.",
-                  F[-1][1], f"{num(len(ga_addr))} requests", "No added latency"))
         R.append(("Stop analytics when consent is declined, and drop addresses from events and page URLs.",
                   f"Removes {len(ga_addr)} address-linked requests to a third party.", f"{num(len(ga_addr))} requests", "No added latency"))
     pages = [r for r in reqs if r["operator"] == "Safe" and CAT_TECH.get(r["category"]) == "static" and r["tier"] >= 2]
     if pages:
-        A.append((0, "Page loads carry the Safe address to the web host in the query string.", "Keep the address in client state or the URL fragment.",
-                  f"{len(pages)} requests for page code and data carried the address in the query string.", f"{num(len(pages))} requests", "No added latency"))
         R.append(("Keep the Safe address out of the URLs the browser fetches.",
                   f"{len(pages)} requests for page code and data carried <code>?safe=</code> to the web host. Holding the address in client state, or in the URL fragment, keeps it on the device.", f"{num(len(pages))} requests", "No added latency"))
     # 2. Backend polling
@@ -727,18 +785,6 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
         F.append(("The Safe backend links the IP address to the Safe address continuously while the app is open.",
                   f"On an idle home screen the app sent {per_min:.0f} account-state requests per minute (Safe info, balances, queue, history), "
                   f"about one burst every {idle_gap(reqs, idle_win):.0f} s. Each carries the Safe address in the URL."))
-        n_be = sum(1 for r in sens if r['host'] in ('safe-client.safe.global', 'api.safe.global'))
-        bal = [r for r in sens if r["host"] in ("safe-client.safe.global", "api.safe.global") and "/balances" in r["path"]]
-        A.append((1, "Safe's backend links the IP address to the Safe address, including transaction content before signing.", "Send backend calls through the anon-RPC transport (Tor), or an Oblivious HTTP relay where latency matters.",
-                  F[-1][1] + " The same Tor client that carries anon-RPC can carry these HTTPS calls. With a relay run by a separate operator, the relay sees the IP address and not the request; the backend sees the request and not the IP address.",
-                  f"{num(n_be)} requests", f"+{TOR} s Tor, +{OHTTP * 1000:.0f} ms relay"))
-        if bal:
-            A.append((2, "Balance reads from the backend name the Safe they ask about.", "Read balances and tokens with PIR instead.",
-                      f"{len(bal)} balance requests went to the backend. A PIR lookup returns the same data without the server learning which account was asked for.",
-                      f"{num(len(bal))} requests", f"+{PIR} s per PIR lookup"))
-        A.append((0, f"The idle app asks the backend about the Safe every {idle_gap(reqs, idle_win):.0f} s.", "Poll less, and only when something changed.",
-                  "Poll the Safe info endpoint only, fetch balances and history when its tags change, and back off when the tab is hidden.",
-                  f"{per_min:.0f} per minute idle", "No added latency"))
         R.append(("Put an Oblivious HTTP relay, run by a separate operator, in front of the Safe backend.",
                   f"The relay sees the IP address and not the request; the backend sees the request and not the IP address. "
                   f"Covers the {sum(1 for r in sens if r['host'] in ('safe-client.safe.global', 'api.safe.global'))} backend requests, which are the largest share. "
@@ -754,10 +800,6 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
         F.append(("Owner and Safe addresses go to Safe's mainnet RPC during a Sepolia session.",
                   f"{len(sanc)} requests call the Chainalysis sanctions oracle (<code>isSanctioned</code>) for the Safe and its signers, and "
                   f"{len(ens)} requests do ENS reverse lookups, both on <code>rpc.safe.global/1</code>. A custom RPC does not change this path."))
-        A.append((2, "Sanctions checks send the Safe and owner addresses to Safe's mainnet RPC, even on Sepolia.", "Check the sanctions list over PIR, or against a local copy.",
-                  F[-1][1], f"{num(len(sanc))} requests", f"+{PIR} s per PIR lookup"))
-        A.append((1, "ENS reverse lookups send the owner addresses to Safe's mainnet RPC.", "Resolve names over anon-RPC, through the user's chosen RPC.",
-                  "Names change rarely, so results can be cached; a PIR name index can replace the lookup later.", f"{num(len(ens))} requests", f"+{TOR} s per lookup"))
         R.append(("Check sanctions over PIR or against a local copy, and resolve names over anon-RPC.",
                   f"Removes {len(sanc)} sanctions requests outright and moves {len(ens)} name lookups to the path the user picked. Local checks are faster than a round trip.", f"{num(len(sanc) + len(ens))} requests", "Faster"))
     # 4. Intent before chain
@@ -779,8 +821,6 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
                   "for the Safe address on 12 networks against both <code>api.cow.fi</code> and <code>barn.api.cow.fi</code>. "
                   f"It also looked up the user's IP address and country at <code>api.country.is</code> ({len(geo)} request{"s" if len(geo) != 1 else ""}), loaded a Cloudflare Turnstile check, "
                   f"and reported to Sentry ({sum(1 for r in sentry if r['tier'] >= 2)} of {len(sentry)} reports carry the Safe address) and LaunchDarkly."))
-        A.append((0, "The CoW widget asks about the Safe on 12 chains and two environments, and looks up the user's IP.", "Query the active chain only; geolocate server-side.",
-                  F[-1][1], f"{num(len(hist))} requests", "No added latency"))
         R.append(("Have the CoW widget query only the active chain and environment, and geolocate server-side.",
                   f"Cuts most of the {len(hist)} order-history requests and removes a third party that returns the user's IP address to the page.", f"{num(len(hist))} requests", "No added latency"))
     # 6. WalletConnect telemetry
@@ -788,16 +828,11 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
     if wc:
         F.append(("The WalletConnect SDK reports to Reown even when WalletConnect is not used.",
                   f"{len(wc)} requests to <code>pulse.walletconnect.org</code> carry a persistent <code>did:key</code> client ID from the first page load."))
-        A.append((0, "WalletConnect reports a persistent client ID although it is not used.", "Load the SDK only when the user picks WalletConnect.",
-                  F[-1][1], f"{num(len(wc))} requests", "No added latency"))
         R.append(("Load the WalletConnect SDK only when the user picks WalletConnect.",
                   f"Removes {len(wc)} telemetry requests and a persistent client ID from sessions that use an injected wallet.", f"{num(len(wc))} requests", "No added latency"))
     # 7. Content privacy for RPC reads
     reads = [r for r in reqs if r["category"] == "RPC: account & contract reads" and r["tier"] >= 2]
     if reads:
-        A.append((2, "RPC reads of balance, nonce and code name the address they ask about.", "anon-RPC for the origin; PIR for the reads made on open.",
-                  f"{len(reads)} RPC reads carried an address. Over Tor each sequential read adds about {TOR} s; a PIR balance lookup costs about {PIR} s and 760 KB upload, so PIR fits the few reads the wallet needs on open, not polling.",
-                  f"{num(len(reads))} requests", f"+{PIR} s per PIR lookup"))
         R.append(("Add anon-RPC for the origin and PIR for balance, nonce and code reads.",
                   f"{len(reads)} RPC reads carried an address. Over Tor each sequential read adds about {TOR} s; a PIR balance lookup costs about {PIR} s and "
                   "760 KB upload, so PIR fits the few reads the wallet needs on open, not polling.", f"{num(len(reads))} requests", f"+{PIR} s per PIR lookup"))
@@ -809,7 +844,7 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
         for t, d, n, c in R) + "</ol>"
     free = sum(1 for *_, c in R if c in ("No added latency", "Faster"))
     title = f"{len(R)} changes; {free} of them add no latency"
-    return fh, rh, title, A
+    return fh, rh, title
 
 
 REPO = "https://github.com/andyguzmaneth/wallet-egress-lab"
