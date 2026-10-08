@@ -69,7 +69,8 @@ svg { width: 100%; height: auto; display: block; }
 .scroll svg { min-width: 760px; }
 svg text { fill: var(--text-secondary); font: 12px ui-sans-serif, system-ui, sans-serif; }
 svg .axis { fill: var(--text-muted); font-size: 11px; }
-svg .steplbl { fill: var(--text-muted); font-size: 10px; }
+svg .steplbl { fill: var(--text-primary); font-size: 9.5px; font-weight: 600; }
+svg .stepdot { fill: var(--surface-1); stroke: var(--text-muted); stroke-width: 1; } svg .steptick { stroke: var(--text-muted); stroke-width: 1; opacity: .5; }
 svg .lane { stroke: var(--grid); stroke-width: 1; }
 svg .band.b0 { fill: var(--band-a); } svg .band.b1 { fill: var(--band-b); }
 .t0 { fill: var(--t0); background: var(--t0); } .t1 { fill: var(--t1); background: var(--t1); }
@@ -102,7 +103,18 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .recs li:before { content: counter(r); font-weight: 650; color: var(--accent); }
 .recs .what { font-weight: 600; }
 .recs .why { grid-column: 2; color: var(--text-secondary); font-size: 14px; }
-.mini { max-width: 680px; }\n.routing td { vertical-align: top; } .routing td:first-child { min-width: 220px; width: 38%; } .routing td:nth-child(4) { min-width: 200px; }
+.mini { max-width: 680px; }
+section .tiles { margin-top: 12px; } section .tile { background: var(--surface-0); }
+h3 { font-size: 15px; margin: 22px 0 6px; }
+a { color: var(--accent, #2a78d6); }
+.kicker a.back { text-decoration: none; font-weight: 600; }
+.kicker a.back::before { content: "\2190  "; }
+details.drill { margin-top: 14px; }
+details.drill > summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--text-secondary); }
+.tierhelp + p { margin-top: 14px; }
+.bd { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px 22px; margin-top: 12px; }
+.bd h4 { margin: 0 0 4px; font-size: 13.5px; display: flex; align-items: center; gap: 6px; }
+.bd table { font-size: 12.5px; } .bd td { padding: 4px 6px 4px 0; vertical-align: top; } .bd code { font-size: 11.5px; word-break: break-all; }\n.routing td { vertical-align: top; } .routing td:first-child { min-width: 220px; width: 38%; } .routing td:nth-child(4) { min-width: 200px; }
 code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .tip { position: fixed; pointer-events: none; background: var(--text-primary); color: var(--surface-1); font-size: 12px; padding: 6px 8px; border-radius: 6px; max-width: 420px; z-index: 9; display: none; }
 .theme { position: absolute; top: 16px; right: 16px; font: inherit; font-size: 12px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
@@ -124,21 +136,29 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
 <button class="theme" type="button" id="theme">Theme</button>
 <main>
 <header>
-  <div class="kicker">Wallet egress inventory · Safe{Wallet} web · Sepolia · run {{RUN}}</div>
-  <h1>Every request Safe{Wallet} made in a {{DUR}}-minute session, and what each one reveals</h1>
-  <p class="lede">A scripted user created a 2-of-2 Safe, received ETH and WETH, sent ETH through the multisig flow, swapped through the CoW widget, sat idle, and switched to a custom RPC. A proxy recorded every request the page made, with full headers and bodies. Each request is classified by who receives it and what it carries. Cookie banner choice: {{COOKIES}}.</p>
+  <div class="kicker"><a class="back" href="{{BACK}}">All runs</a> · Safe{Wallet} web · Sepolia · {{DATE}} · run {{RUN}}</div>
+  <h1>Safe{Wallet} Egress Inventory</h1>
+  <p class="lede">Every request a Safe{Wallet} session sends, who receives it, what it reveals, and which privacy treatment each one needs.</p>
 </header>
 
-<div class="tiles">
-  <div class="tile"><div class="v">{{N}}</div><div class="l">requests in {{DUR}} min, plus {{NPRE}} CORS preflights. {{IDLERPM}} per minute while idle on the home page.</div></div>
-  <div class="tile"><div class="v">{{SENS}}</div><div class="l">requests ({{SENSPCT}}) carry an address or reveal a pending action.</div></div>
-  <div class="tile"><div class="v">{{BACKEND}}</div><div class="l">of those go to the Safe backend API. {{RPC}} go to Safe's RPC.</div></div>
-  <div class="tile"><div class="v">{{NTHIRDADDR}}</div><div class="l">third parties receive an address: {{THIRDADDR}}.</div></div>
-</div>
+<section>
+  <h2>Summary</h2>
+  <div class="tiles">
+    <div class="tile"><div class="v">{{N}}</div><div class="l">requests in {{DUR}} min, plus {{NPRE}} CORS preflights. {{IDLERPM}} per minute while idle on the home page.</div></div>
+    <div class="tile"><div class="v">{{SENS}}</div><div class="l">requests ({{SENSPCT}}) carry an address or reveal a pending action.</div></div>
+    <div class="tile"><div class="v">{{BACKEND}}</div><div class="l">of those go to the Safe backend API. {{RPC}} go to Safe's RPC.</div></div>
+    <div class="tile"><div class="v">{{NTHIRDADDR}}</div><div class="l">third parties receive an address: {{THIRDADDR}}.</div></div>
+  </div>
+  <h3>Key findings</h3>
+  {{FINDINGS}}
+</section>
 
 <section>
-  <h2>Findings</h2>
-  {{FINDINGS}}
+  <h2>How we did it</h2>
+  <p>A script played one user through {{NSTEPS}} actions on Sepolia: create a 2-of-2 Safe, receive ETH and WETH, send ETH through the multisig flow (owner A proposes, owner B confirms and executes), swap WETH for COW in the CoW widget, sit idle on the home page, and switch to a custom RPC. A second, read-only pass opened a public Safe on mainnet. Cookie banner choice: {{COOKIES}}.</p>
+  <p>Chromium (Playwright, headed under Xvfb, fresh profile, QUIC off) ran behind mitmproxy with a trusted CA, so every HTTP request and WebSocket message from the page, its iframes and its service worker was recorded with headers and bodies. The signer was an injected EIP-1193 provider whose keys and RPC stay outside the browser, so the capture holds only traffic that Safe{Wallet} and its embedded widgets make. A baseline run with a blank page identified the browser's own Google traffic, which is excluded. Identifiers were found by searching URLs, headers and bodies for values the harness knows: the Safe address, both owners, the counterparty, safeTxHash and CoW order ids, and analytics client IDs. Each request then gets one of four tiers:</p>
+  <ul class="tierhelp">{{TIERHELP}}</ul>
+  <p class="sub">Latency references: direct RPC about 90 ms p50; Tor through an Arti client {{TOR}} s p50 and 7.3 s p95; tor-js in the browser {{TORJS}} s p50 per call after a 26 to 30 s bootstrap; a PIR balance lookup {{PIR}} s p50 over clearnet with about 760 KB uploaded per lookup. The OHTTP figure ({{OHTTP}} ms) is an assumption for one extra relay hop. Limits: one session per plan on one day; the mobile app and browser extensions were out of scope; the tier is a lower bound for requests whose bodies are compressed or binary.{{FAILS}}</p>
 </section>
 
 <section>
@@ -151,7 +171,7 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
     <div class="seg t0 ink-dark" style="flex:{{FT}}"><b>Third parties</b> {{THIRD}}<div class="sub">{{NTHIRD}}</div></div>
     <div class="seg t0 ink-dark" style="flex:{{FC}}; opacity:.6"><b>Custom RPC</b> {{CUSTOMPCT}}<div class="sub">{{NCUSTOM}}</div></div>
   </div>
-  <p class="sub">Widths are proportional. "Safe web app" counts page loads whose URL holds <code>?safe=</code>. "Custom RPC" is the node the user set in step 15.</p>
+  <details class="drill"><summary>What these requests are</summary>{{BREAKDOWN}}</details>
 </section>
 
 <section>
@@ -183,7 +203,6 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
   <h2>Requests per user action</h2>
   {{LEGEND}}
   <div class="scroll">{{STEPS}}</div>
-  <ul class="tierhelp">{{TIERHELP}}</ul>
 </section>
 
 <section>
@@ -220,13 +239,7 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
 
 {{MAINNET}}
 
-<section>
-  <h2>Method and limits</h2>
-  <p>Chromium (Playwright, headed under Xvfb, fresh profile, QUIC off) ran behind mitmproxy with a trusted CA, so every HTTP request and WebSocket message from the page, its iframes and its service worker was recorded with bodies. The signer was an injected EIP-1193 provider whose keys and RPC stay outside the browser, so the capture holds only traffic that Safe{Wallet} and its embedded widgets make. A baseline run with a blank page identified the browser's own Google traffic, which is excluded. Identifiers were found by searching URLs, headers and bodies for values the harness knows: the Safe address, both owners, the counterparty, safeTxHash and CoW order ids, and analytics client IDs.{{FAILS}}</p>
-  <p>Latency references: direct RPC about 90 ms p50; Tor through an Arti client {{TOR}} s p50 and 7.3 s p95; tor-js in the browser {{TORJS}} s p50 per call after a 26 to 30 s bootstrap; a PIR balance lookup {{PIR}} s p50 over clearnet with about 760 KB uploaded per lookup. The OHTTP figure is an assumption for one extra relay hop, not a measurement.</p>
-  <p>Limits: one session per plan on one day; Sepolia hides some mainnet features, so a read-only mainnet pass on a public Safe was added; the mobile app and browser extensions were out of scope; the tier is a lower bound for requests whose bodies are compressed or binary.</p>
-</section>
-<footer>Generated by wallet-egress-lab from run {{RUN}}.</footer>
+<footer>Generated by wallet-egress-lab from run {{RUN}}. <a href="{{BACK}}">All runs</a></footer>
 </main>
 <div class="tip" id="tip"></div>
 <script>

@@ -1,9 +1,12 @@
 """Render one self-contained HTML report from analysed runs.
 
 Usage: python3 -I analysis/report.py --sepolia <run> [--mainnet <run>] --out report.html
+       python3 -I analysis/report.py --sepolia <run> [--mainnet <run>] --site docs   (adds the run to the site)
 """
 import argparse
 import html
+import time
+import re
 import json
 import statistics
 from collections import Counter, defaultdict
@@ -105,15 +108,24 @@ def svg_timeline(a) -> str:
     t0 = a["t0"]
     tmax = max(r["t"] for r in reqs) - t0
     lanes = [o for o in OPERATOR_ORDER if any(op_bucket(r["operator"]) == o for r in reqs)] + ["Other"]
-    W, left, lane_h, top = 1000, 150, 22, 34
+    W, left, lane_h, top = 1000, 150, 22, 58
     H = top + lane_h * len(lanes) + 26
     x = lambda t: left + (W - left - 10) * (t / tmax)
     out = [f'<svg viewBox="0 0 {W} {H}" class="timeline" role="img" aria-label="Every request over the journey, by operator and tier">']
     for i, w in enumerate(a["windows"]):
         x0, x1 = x(w["t0"] - t0), x(w["t1"] - t0)
         out.append(f'<rect x="{x0:.1f}" y="{top - 4}" width="{max(1, x1 - x0):.1f}" height="{lane_h * len(lanes) + 4}" class="band b{i % 2}"><title>{esc(STEP_LABELS.get(w["name"], w["name"]))}</title></rect>')
-        if x1 - x0 > 26:
-            out.append(f'<text x="{(x0 + x1) / 2:.1f}" y="{top - 10}" class="steplbl" text-anchor="middle">{i + 1}</text>')
+    # Step numbers on two staggered rows, so short steps keep a label.
+    last = [-99.0, -99.0]
+    for i, w in enumerate(a["windows"]):
+        x0, x1 = x(w["t0"] - t0), x(w["t1"] - t0)
+        cx = (x0 + x1) / 2
+        row = 0 if cx - last[0] >= 18 else 1
+        last[row] = cx
+        y = top - 34 + row * 16
+        out.append(f'<line x1="{cx:.1f}" x2="{cx:.1f}" y1="{y + 3}" y2="{top - 4}" class="steptick"/>')
+        out.append(f'<circle cx="{cx:.1f}" cy="{y - 4}" r="7.5" class="stepdot"><title>{esc(STEP_LABELS.get(w["name"], w["name"]))}</title></circle>')
+        out.append(f'<text x="{cx:.1f}" y="{y}" class="steplbl" text-anchor="middle">{i + 1}</text>')
     for li, lane in enumerate(lanes):
         y = top + li * lane_h + lane_h / 2
         out.append(f'<text x="{left - 8}" y="{y + 4:.1f}" text-anchor="end" class="lanelbl">{esc(lane)}</text>')
@@ -222,6 +234,44 @@ def routing(reqs) -> str:
     return "".join(rows)
 
 
+def bucket(r) -> str:
+    if r["host"] in ("safe-client.safe.global", "api.safe.global"):
+        return "Safe backend API"
+    if r["host"] == "rpc.safe.global":
+        return "Safe RPC"
+    if r["operator"] == "Safe":
+        return "Safe web app"
+    if r["operator"] == "Custom RPC (user-set)":
+        return "Custom RPC"
+    return "Third parties"
+
+
+def shape(r) -> str:
+    if r["rpc_methods"]:
+        return ", ".join(f"{m} ×{n}" if n > 1 else m for m, n in Counter(r["rpc_methods"]).most_common(2))
+    path = re.sub(r"0x[0-9a-fA-F]{64}", "{hash}", r["path"].split("?")[0])
+    path = re.sub(r"0x[0-9a-fA-F]{40}", "{address}", path)
+    path = re.sub(r"/\d+(?=/|$)", "/{n}", path)
+    return (r["host"] if bucket(r) == "Third parties" else "") + (path[:70] + ("…" if len(path) > 70 else ""))
+
+
+def breakdown(sens) -> str:
+    out = ['<div class="bd">']
+    tier_of = {"Safe backend API": 3, "Safe RPC": 2, "Safe web app": 1, "Third parties": 0, "Custom RPC": 0}
+    for b in ["Safe backend API", "Safe RPC", "Safe web app", "Third parties", "Custom RPC"]:
+        rs = [r for r in sens if bucket(r) == b]
+        if not rs:
+            continue
+        rows = []
+        for (o, c), n in Counter((r["operator"], r["category"]) for r in rs).most_common(8):
+            ex = Counter(shape(r) for r in rs if r["category"] == c and r["operator"] == o).most_common(1)[0][0]
+            who = f"{esc(o)} · " if b == "Third parties" else ""
+            rows.append(f"<tr><td class=num>{n}</td><td>{who}{esc(c)}<div><code>{esc(ex)}</code></div></td></tr>")
+        out.append(f'<div><h4><i class="sw t{tier_of[b]}"></i>{esc(b)} <span class=sub>{len(rs)}</span></h4><table>{"".join(rows)}</table></div>')
+    out.append("</div>")
+    return "".join(out)
+
+
 def matrix(a):
     ops = defaultdict(lambda: Counter())
     for r in a["requests"]:
@@ -242,7 +292,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sepolia", required=True)
     ap.add_argument("--mainnet")
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--out", help="write one report file")
+    ap.add_argument("--site", help="site root (docs): writes runs/<run>/index.html and rebuilds the run index")
+    ap.add_argument("--back", default="../../index.html")
     args = ap.parse_args()
     a = json.loads((Path(args.sepolia) / "analysis.json").read_text())
     m = json.loads((Path(args.mainnet) / "analysis.json").read_text()) if args.mainnet else None
@@ -361,7 +413,8 @@ def main():
         "THIRDADDR": esc(", ".join(third_addr) or "none"), "NTHIRDADDR": str(len(third_addr)),
         "IDLERPM": f"{idle_rpm:.0f}", "GA": str(len(ga)), "GAADDR": str(len(ga_addr)),
         "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a), "LEGEND": legend(),
-        "ROUTING": routing(reqs), "INV": "".join(inv_rows), "MATRIX": "".join(mat_rows), "PROJ": proj_rows,
+        "ROUTING": routing(reqs), "BREAKDOWN": breakdown(sens), "BACK": esc(args.back),
+        "DATE": time.strftime("%Y-%m-%d", time.gmtime(a["t0"])), "NSTEPS": str(len(a["windows"])), "INV": "".join(inv_rows), "MATRIX": "".join(mat_rows), "PROJ": proj_rows,
         "CUSTOM": esc(custom_note), "MAINNET": mainnet_html, "FAILS": fail_note,
         "COOKIES": "necessary only" if a.get("cookies") == "necessary" else "accept all",
         "TOR": f"{TOR}", "WINDOW": str(WINDOW), "TORJS": f"{TORJS}", "PIR": f"{PIR}", "OHTTP": f"{OHTTP * 1000:.0f}",
@@ -369,8 +422,20 @@ def main():
         "STEPKEY": "".join(f'<li>{esc(STEP_LABELS.get(w["name"], w["name"]))}</li>' for w in a["windows"]),
     }.items():
         page = page.replace("{{" + k + "}}", v)
-    Path(args.out).write_text(page)
-    print("wrote", args.out)
+    out = Path(args.out) if args.out else Path(args.site) / "runs" / a["run"] / "index.html"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(page)
+    print("wrote", out)
+    if args.site:
+        meta = {
+            "run": a["run"], "date": time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(a["t0"])), "wallet": "Safe{Wallet} web",
+            "plan": "Sepolia journey" + (" + mainnet read-only pass" if m else ""), "minutes": round(dur_min),
+            "requests": len(reqs), "linked": len(sens), "linked_pct": pct(len(sens), len(reqs)),
+            "steps_ok": sum(1 for s in a["steps"] if s["ok"]), "steps": len(a["steps"]),
+            "backend_pct": pct(to_backend, len(sens)), "rpc_pct": pct(to_rpc, len(sens)), "cookies": a.get("cookies"),
+        }
+        (out.parent / "meta.json").write_text(json.dumps(meta, indent=2))
+        build_index(Path(args.site))
 
 
 def narrative(a, reqs, sens, idle_win, ga, ga_addr):
@@ -455,6 +520,21 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
 
 
 TEMPLATE = (Path(__file__).parent / "template.html").read_text()
+INDEX_TEMPLATE = (Path(__file__).parent / "index.html").read_text()
+
+
+def build_index(site: Path):
+    metas = sorted((json.loads(f.read_text()) for f in site.glob("runs/*/meta.json")), key=lambda m: m["run"], reverse=True)
+    rows = "".join(
+        f'<tr><td><a href="runs/{esc(x["run"])}/index.html">{esc(x["date"])}</a><div class=sub>{esc(x["run"])}</div></td>'
+        f'<td>{esc(x["wallet"])}<div class=sub>{esc(x["plan"])}</div></td><td class=num>{x["minutes"]} min</td>'
+        f'<td class=num>{x["requests"]}</td><td class=num>{x["linked"]}<div class=sub>{esc(x["linked_pct"])}</div></td>'
+        f'<td class=num>{esc(x["backend_pct"])}</td><td class=num>{esc(x["rpc_pct"])}</td>'
+        f'<td class=num>{x["steps_ok"]}/{x["steps"]}</td></tr>' for x in metas)
+    latest = f'runs/{esc(metas[0]["run"])}/index.html' if metas else "#"
+    (site / "index.html").write_text(INDEX_TEMPLATE.replace("{{ROWS}}", rows).replace("{{LATEST}}", latest).replace("{{N}}", str(len(metas))))
+    (site / ".nojekyll").write_text("")
+    print("wrote", site / "index.html")
 
 if __name__ == "__main__":
     main()

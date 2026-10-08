@@ -19,7 +19,7 @@ scripts/run.sh mainnet               # read-only pass on a public Safe
 
 python3 -I analysis/analyze.py runs/<sepolia-run> --baseline runs/<baseline-run>
 python3 -I analysis/analyze.py runs/<mainnet-run> --baseline runs/<baseline-run>
-python3 -I analysis/report.py --sepolia runs/<sepolia-run> --mainnet runs/<mainnet-run> --out report.html
+python3 -I analysis/report.py --sepolia runs/<sepolia-run> --mainnet runs/<mainnet-run> --site docs
 ```
 
 ## How a run works
@@ -31,7 +31,7 @@ python3 -I analysis/report.py --sepolia runs/<sepolia-run> --mainnet runs/<mainn
 | Signer | `driver/signer.ts` | Injected EIP-1193 provider, announced over EIP-6963 as "Lab Signer". Keys and the signer's RPC stay in Node, outside the proxied browser. The capture therefore holds only wallet-app traffic. |
 | Outside party | `driver/external.ts` | Account R sends ETH or WETH to the Safe, to simulate "receive". |
 | Analysis | `analysis/analyze.py` | Assigns each request to a step, an operator and a service category. Searches URLs, headers and bodies for known values (Safe address, owners, counterparty, safeTxHash, CoW order ids, analytics client ids). Assigns a tier. Writes `analysis.json`. |
-| Report | `analysis/report.py`, `analysis/template.html` | One HTML file, no external requests, light and dark. |
+| Report | `analysis/report.py`, `analysis/template.html`, `analysis/index.html` | One self-contained HTML report per run under `docs/runs/<run>/`, and `docs/index.html`, which lists all runs. `--out file.html` writes a single report instead. |
 | Exploration | `driver/session.ts`, `bin-lab.sh` | Long-running browser with an HTTP control port. Use it to find selectors for new steps. |
 
 ## Tiers
