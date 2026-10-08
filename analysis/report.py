@@ -120,7 +120,7 @@ def svg_timeline(a) -> str:
     for i, w in enumerate(a["windows"]):
         x0, x1 = x(w["t0"] - t0), x(w["t1"] - t0)
         cx = (x0 + x1) / 2
-        row = 0 if cx - last[0] >= 18 else 1
+        row = 0 if cx - last[0] >= 20 else 1
         last[row] = cx
         y = top - 34 + row * 16
         out.append(f'<line x1="{cx:.1f}" x2="{cx:.1f}" y1="{y + 3}" y2="{top - 4}" class="steptick"/>')
@@ -364,7 +364,7 @@ def main():
         msens = [r for r in mreqs if r["tier"] >= 2]
         rows = "".join(f"<tr><td>{esc(o)}</td><td>{esc(c)}</td><td class=num>{n}</td></tr>" for (o, c), n in new.most_common(12))
         mainnet_html = f"""
-<section>
+<section id="mainnet">
 <h2>What the mainnet pass adds</h2>
 <p>A read-only pass on mainnet watched a public Safe (<code>{esc(m['safe'][:10])}…</code>) with an unfunded signer connected:
 {len(mreqs)} requests, {len(msens)} of them address-linked. These operator and service pairs appeared on mainnet and not in the Sepolia journey:</p>
@@ -413,7 +413,7 @@ def main():
         "THIRDADDR": esc(", ".join(third_addr) or "none"), "NTHIRDADDR": str(len(third_addr)),
         "IDLERPM": f"{idle_rpm:.0f}", "GA": str(len(ga)), "GAADDR": str(len(ga_addr)),
         "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a), "LEGEND": legend(),
-        "ROUTING": routing(reqs), "BREAKDOWN": breakdown(sens), "BACK": esc(args.back),
+        "ROUTING": routing(reqs), "BREAKDOWN": breakdown(sens), "RAILMAINNET": '<li><a href="#mainnet" data-rail="mainnet"><span class="tick"></span><span class="label">Mainnet pass</span></a></li>' if m else "", "BACK": esc(args.back),
         "DATE": time.strftime("%Y-%m-%d", time.gmtime(a["t0"])), "NSTEPS": str(len(a["windows"])), "INV": "".join(inv_rows), "MATRIX": "".join(mat_rows), "PROJ": proj_rows,
         "CUSTOM": esc(custom_note), "MAINNET": mainnet_html, "FAILS": fail_note,
         "COOKIES": "necessary only" if a.get("cookies") == "necessary" else "accept all",

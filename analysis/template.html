@@ -130,10 +130,28 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
   .mini td:first-child { white-space: normal; word-break: break-all; }
 }
 @media print { .theme, .chips { display: none; } section { break-inside: avoid; } }
+
+html { scroll-behavior: smooth; scroll-padding-top: 16px; }
+.rail { position: fixed; top: 50%; left: 24px; transform: translateY(-50%); z-index: 8; }
+.rail ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.rail a { display: flex; align-items: center; gap: 9px; color: var(--text-muted); text-decoration: none; font-size: 12px; line-height: 1.2; }
+.rail .tick { display: block; width: 14px; height: 1px; background: currentColor; opacity: .5; transition: width .25s, opacity .25s; }
+.rail .label { white-space: nowrap; transition: opacity .25s, transform .25s; }
+.rail a:hover, .rail a:focus-visible, .rail a.current { color: var(--text-primary); }
+.rail a:hover .tick, .rail a.current .tick { width: 26px; opacity: 1; }
+.rail a.current .tick { background: var(--accent); }
+@media (max-width: 1399px) {
+  .rail { left: 14px; }
+  .rail .label { opacity: 0; transform: translateX(-4px); background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; }
+  .rail a:hover .label, .rail a:focus-visible .label { opacity: 1; transform: none; }
+}
+@media (max-width: 1180px) { .rail { display: none; } }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .rail .tick, .rail .label { transition: none; } }
 </style>
 </head>
 <body>
 <button class="theme" type="button" id="theme">Theme</button>
+<nav class="rail" aria-label="Sections"><ul><li><a href="#summary" data-rail="summary"><span class="tick"></span><span class="label">Summary</span></a></li><li><a href="#method" data-rail="method"><span class="tick"></span><span class="label">How we did it</span></a></li><li><a href="#where" data-rail="where"><span class="tick"></span><span class="label">Where requests go</span></a></li><li><a href="#routing" data-rail="routing"><span class="tick"></span><span class="label">Routing plan</span></a></li><li><a href="#who" data-rail="who"><span class="tick"></span><span class="label">Who learns what</span></a></li><li><a href="#session" data-rail="session"><span class="tick"></span><span class="label">Session timeline</span></a></li><li><a href="#actions" data-rail="actions"><span class="tick"></span><span class="label">Per user action</span></a></li><li><a href="#inventory" data-rail="inventory"><span class="tick"></span><span class="label">Endpoint inventory</span></a></li><li><a href="#latency" data-rail="latency"><span class="tick"></span><span class="label">Latency cost</span></a></li><li><a href="#recs" data-rail="recs"><span class="tick"></span><span class="label">Recommendations</span></a></li>{{RAILMAINNET}}</ul></nav>
 <main>
 <header>
   <div class="kicker"><a class="back" href="{{BACK}}">All runs</a> · Safe{Wallet} web · Sepolia · {{DATE}} · run {{RUN}}</div>
@@ -141,7 +159,7 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
   <p class="lede">Every request a Safe{Wallet} session sends, who receives it, what it reveals, and which privacy treatment each one needs.</p>
 </header>
 
-<section>
+<section id="summary">
   <h2>Summary</h2>
   <div class="tiles">
     <div class="tile"><div class="v">{{N}}</div><div class="l">requests in {{DUR}} min, plus {{NPRE}} CORS preflights. {{IDLERPM}} per minute while idle on the home page.</div></div>
@@ -153,7 +171,7 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
   {{FINDINGS}}
 </section>
 
-<section>
+<section id="method">
   <h2>How we did it</h2>
   <p>A script played one user through {{NSTEPS}} actions on Sepolia: create a 2-of-2 Safe, receive ETH and WETH, send ETH through the multisig flow (owner A proposes, owner B confirms and executes), swap WETH for COW in the CoW widget, sit idle on the home page, and switch to a custom RPC. A second, read-only pass opened a public Safe on mainnet. Cookie banner choice: {{COOKIES}}.</p>
   <p>Chromium (Playwright, headed under Xvfb, fresh profile, QUIC off) ran behind mitmproxy with a trusted CA, so every HTTP request and WebSocket message from the page, its iframes and its service worker was recorded with headers and bodies. The signer was an injected EIP-1193 provider whose keys and RPC stay outside the browser, so the capture holds only traffic that Safe{Wallet} and its embedded widgets make. A baseline run with a blank page identified the browser's own Google traffic, which is excluded. Identifiers were found by searching URLs, headers and bodies for values the harness knows: the Safe address, both owners, the counterparty, safeTxHash and CoW order ids, and analytics client IDs. Each request then gets one of four tiers:</p>
@@ -161,7 +179,7 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
   <p class="sub">Latency references: direct RPC about 90 ms p50; Tor through an Arti client {{TOR}} s p50 and 7.3 s p95; tor-js in the browser {{TORJS}} s p50 per call after a 26 to 30 s bootstrap; a PIR balance lookup {{PIR}} s p50 over clearnet with about 760 KB uploaded per lookup. The OHTTP figure ({{OHTTP}} ms) is an assumption for one extra relay hop. Limits: one session per plan on one day; the mobile app and browser extensions were out of scope; the tier is a lower bound for requests whose bodies are compressed or binary.{{FAILS}}</p>
 </section>
 
-<section>
+<section id="where">
   <h2>Where address-linked requests go</h2>
   <p>Hiding the IP address on the RPC path covers only the RPC share. The rest goes to the Safe backend and to third parties, which see the same IP address and the same Safe address.</p>
   <div class="split">
@@ -174,7 +192,7 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
   <details class="drill"><summary>What these requests are</summary>{{BREAKDOWN}}</details>
 </section>
 
-<section>
+<section id="routing">
   <h2>Routing plan: what can stay plain, what needs anon-RPC, what needs PIR</h2>
   <p>Each request in the session, sorted by the cheapest treatment that removes the address-to-IP link. The Safe backend carries most address-linked traffic, so an origin-hiding relay in front of the backend API does more than anon-RPC on the RPC path alone.</p>
   <div class="scroll"><table class="routing">
@@ -183,7 +201,7 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
   </table></div>
 </section>
 
-<section>
+<section id="who">
   <h2>Who learns what</h2>
   <p>Requests per operator that carry each identifier. Every request also carries the IP address. A cell is the count of requests in the session; a dot means none.</p>
   <div class="scroll"><table>
@@ -192,20 +210,20 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
   </table></div>
 </section>
 
-<section>
+<section id="session">
   <h2>The session, request by request</h2>
   {{LEGEND}}
   <div class="scroll">{{TIMELINE}}</div>
   <ol class="stepkey">{{STEPKEY}}</ol>
 </section>
 
-<section>
+<section id="actions">
   <h2>Requests per user action</h2>
   {{LEGEND}}
   <div class="scroll">{{STEPS}}</div>
 </section>
 
-<section>
+<section id="inventory">
   <h2>Endpoint inventory</h2>
   <p>One row per operator and service. Latency is the time from request start to the last response byte, measured at the proxy. Click a header to sort.</p>
   <div class="chips" id="chips">
@@ -222,7 +240,7 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
   <button class="more" type="button" id="more">Show all rows</button>
 </section>
 
-<section>
+<section id="latency">
   <h2>Latency cost of hiding the origin</h2>
   <p>For each user action, the table takes the address-linked requests in the first {{WINDOW}} s after the action, counts each endpoint once (repeated polls of the same endpoint are dropped), and finds the longest chain of them that run one after another. Parallel requests share one added delay; sequential requests add up. The estimate multiplies the chain length by the added latency per request: {{TOR}} s for Tor (p50 measured from an Arti client), {{OHTTP}} ms for one Oblivious HTTP relay hop (assumed). It is an upper bound for interactive steps, because some sequential requests do not depend on each other.</p>
   <div class="scroll"><table class="mini">
@@ -232,7 +250,7 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
   <p>{{CUSTOM}}</p>
 </section>
 
-<section>
+<section id="recs">
   <h2>Recommendations</h2>
   {{RECS}}
 </section>
@@ -286,6 +304,18 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
     var t = b.dataset.t; if (t !== "all") table.classList.add("all");
     Array.prototype.forEach.call(table.tBodies[0].rows, function (r) { r.style.display = t === "all" || r.dataset.tier === t ? "" : "none"; });
   });
+})();
+
+(function () {
+  var links = Array.prototype.slice.call(document.querySelectorAll("[data-rail]"));
+  var secs = links.map(function (a) { return document.getElementById(a.getAttribute("data-rail")); });
+  function update() {
+    var cur = 0;
+    secs.forEach(function (s, i) { if (s && s.getBoundingClientRect().top < innerHeight * 0.35) cur = i; });
+    if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) cur = secs.length - 1;
+    links.forEach(function (a, i) { a.classList.toggle("current", i === cur); if (i === cur) a.setAttribute("aria-current", "true"); else a.removeAttribute("aria-current"); });
+  }
+  addEventListener("scroll", update, { passive: true }); addEventListener("resize", update); update();
 })();
 </script>
 </body>
