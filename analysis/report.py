@@ -202,6 +202,30 @@ def svg_steps(a) -> str:
     return "".join(out)
 
 
+def svg_latency(proj) -> str:
+    if not proj:
+        return ""
+    W, left, rh = 1000, 250, 26
+    H = len(proj) * rh + 34
+    mx = max(x["tor_all"] for x in proj) or 1
+    x = lambda v: left + (W - left - 60) * v / mx
+    out = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Added wait per action: relay for the backend versus everything over Tor">']
+    for v in range(0, int(mx) + 1, 5):
+        out.append(f'<line x1="{x(v):.1f}" x2="{x(v):.1f}" y1="4" y2="{H - 22}" class="lane"/>'
+                   f'<text x="{x(v):.1f}" y="{H - 6}" class="axis" text-anchor="middle">+{v} s</text>')
+    for i, p_ in enumerate(proj):
+        y = 16 + i * rh
+        lbl = STEP_LABELS.get(p_["step"], p_["step"])
+        a_, b_ = x(p_["mixed"]), x(p_["tor_all"])
+        out.append(f'<text x="{left - 12}" y="{y + 4}" text-anchor="end" class="lanelbl">{esc(lbl)}</text>')
+        out.append(f'<line x1="{a_:.1f}" x2="{b_:.1f}" y1="{y}" y2="{y}" class="dumb"/>')
+        out.append(f'<circle cx="{a_:.1f}" cy="{y}" r="5" class="t2" data-tip="{esc(lbl)}: +{p_["mixed"]:.1f} s with a relay for the backend, Tor for RPC"/>')
+        out.append(f'<circle cx="{b_:.1f}" cy="{y}" r="5" class="t3" data-tip="{esc(lbl)}: +{p_["tor_all"]:.1f} s with everything over Tor"/>')
+        out.append(f'<text x="{b_ + 10:.1f}" y="{y + 4}" class="axis">+{p_["tor_all"]:.0f} s</text>')
+    out.append("</svg>")
+    return "".join(out)
+
+
 def legend() -> str:
     return '<div class="legend">' + "".join(
         f'<span><i class="sw t{t}"></i>{esc(n)}</span>' for t, n in enumerate(TIER_NAMES)) + "</div>"
@@ -464,7 +488,7 @@ def main():
         "FB": str(to_backend), "FR": str(to_rpc), "FS": str(to_safe_other), "FT": str(to_third), "FC": str(max(to_custom, 0)),
         "THIRDADDR": esc(", ".join(third_addr) or "none"), "NTHIRDADDR": str(len(third_addr)),
         "IDLERPM": f"{idle_rpm:.0f}", "GA": str(len(ga)), "GAADDR": str(len(ga_addr)),
-        "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a), "LEGEND": legend(),
+        "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a), "LATSVG": svg_latency(proj), "LEGEND": legend(),
         "ROUTING": routing(reqs), "BREAKDOWN": breakdown(sens), "RAILMAINNET": '<li><a href="#mainnet" data-rail="mainnet"><span class="tick"></span><span class="label">Mainnet pass</span></a></li>' if m else "", "BACK": esc(args.back),
         "DATE": time.strftime("%Y-%m-%d", time.gmtime(a["t0"])), "NSTEPS": str(len(a["windows"])), "INV": "".join(inv_rows), "MATRIX": "".join(mat_rows), "PROJ": proj_rows,
         "CUSTOM": esc(custom_note), "MAINNET": mainnet_html, "FAILS": fail_note,

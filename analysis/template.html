@@ -75,6 +75,7 @@ svg .axis { fill: var(--text-muted); font-size: 11px; }
 svg .steplbl { fill: var(--text-primary); font-size: 9.5px; font-weight: 600; }
 svg .stepdot { fill: var(--surface-0); stroke: var(--text-muted); stroke-width: 1; } svg .steptick { stroke: var(--text-muted); stroke-width: 1; opacity: .5; }
 svg .lane { stroke: var(--grid); stroke-width: 1; }
+svg .dumb { stroke: var(--text-muted); stroke-width: 2; opacity: .6; }
 svg .band.b0 { fill: var(--band-a); } svg .band.b1 { fill: var(--band-b); }
 .t0 { fill: var(--t0); background: var(--t0); } .t1 { fill: var(--t1); background: var(--t1); }
 .t2 { fill: var(--t2); background: var(--t2); } .t3 { fill: var(--t3); background: var(--t3); }
@@ -269,12 +270,17 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 <section id="latency">
   <div class="eyebrow">Latency cost</div>
   <h2>{{LAT_T}}</h2>
-  <p>For each user action, the table takes the address-linked requests in the first {{WINDOW}} s after the action, counts each endpoint once (repeated polls of the same endpoint are dropped), and finds the longest chain of them that run one after another. Parallel requests share one added delay; sequential requests add up. The estimate multiplies the chain length by the added latency per request: {{TOR}} s for Tor (p50 measured from an Arti client), {{OHTTP}} ms for one Oblivious HTTP relay hop (assumed). It is an upper bound for interactive steps, because some sequential requests do not depend on each other.</p>
-  <div class="scroll"><table class="mini">
+  <p>The added wait for each action: the longest chain of address-linked requests that run one after another, times the added latency per request. An upper bound.</p>
+  <div class="legend"><span><i class="sw t2"></i>Relay for the backend ({{OHTTP}} ms), Tor for RPC</span><span><i class="sw t3"></i>Everything over Tor ({{TOR}} s)</span></div>
+  <div class="scroll">{{LATSVG}}</div>
+  <p class="sub"><button type="button" class="readmore" data-show="lat-table">Show the numbers</button></p>
+  <div id="lat-table" hidden><div class="scroll"><table class="mini">
     <thead><tr><th>Action</th><th class=num>Distinct address-linked requests</th><th class=num>Sequential chain</th><th class=num>All over Tor</th><th class=num>Backend via OHTTP, RPC via Tor</th></tr></thead>
     <tbody>{{PROJ}}</tbody>
   </table></div>
+  <p class="sub">Only requests in the first {{WINDOW}} s after the action count, each endpoint once.</p>
   <p class="sub">Sources: Direct RPC: about 90 ms p50. Tor through an Arti client: {{TOR}} s p50, 7.3 s p95. tor-js in the browser: {{TORJS}} s p50 per call after a 26 to 30 s bootstrap. PIR balance lookup: {{PIR}} s p50 over clearnet, about 760 KB uploaded per lookup. OHTTP: {{OHTTP}} ms for one extra relay hop, an assumption, not a measurement.</p>
+</div>
   <p>{{CUSTOM}}</p>
 </section>
 
@@ -373,6 +379,10 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 
 document.querySelectorAll(".fmore").forEach(function (b) {
   b.addEventListener("click", function () { var d = b.nextElementSibling; d.hidden = false; b.hidden = true; b.setAttribute("aria-expanded", "true"); });
+});
+
+document.querySelectorAll("[data-show]").forEach(function (b) {
+  b.addEventListener("click", function () { var t = document.getElementById(b.getAttribute("data-show")); t.hidden = !t.hidden; b.textContent = t.hidden ? "Show the numbers" : "Hide the numbers"; });
 });
 </script>
 </body>
