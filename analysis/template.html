@@ -116,7 +116,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .recs li { counter-increment: r; display: grid; grid-template-columns: 28px 1fr; gap: 4px 10px; padding: 10px 0; border-bottom: 1px solid var(--grid); }
 .recs li:before { content: counter(r); font-weight: 650; color: var(--accent); }
 .recs .what { font-weight: 600; }
-.recs .why { grid-column: 2; color: var(--text-secondary); font-size: 14px; }
+.recs .what .fmore { font-weight: 600; }
+.recs .why { color: var(--text-secondary); font-weight: 400; }
+.recs .chips-row { grid-column: 2; display: flex; gap: 4px; flex-wrap: wrap; }
+.recs .tag { font-size: 11.5px; } .recs .tag.free { color: var(--text-primary); border-color: var(--text-muted); }
 .mini { max-width: 680px; }
 section .tiles { margin-top: 12px; }
 .eyebrow { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 4px; }
