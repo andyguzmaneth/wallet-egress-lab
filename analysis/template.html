@@ -179,6 +179,21 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 .codebox pre { margin: 0; padding: 14px 16px; overflow-x: auto; background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; font-size: 12.5px; line-height: 1.6; }
 .codebox .copy { position: absolute; top: 8px; right: 8px; font: inherit; font-size: 12px; border: 1px solid var(--border); background: var(--surface-0); color: var(--text-secondary); border-radius: 6px; padding: 2px 9px; cursor: pointer; }
 .mini.repro { max-width: 900px; } .repro td { padding: 6px 12px 6px 0; } .repro td:first-child { font-weight: 600; white-space: nowrap; }
+
+.tlbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; }
+.tlbar .legend { margin: 6px 0; }
+.zoom { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-muted); }
+.zoom button { font: inherit; font-size: 13px; min-width: 28px; height: 28px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); border-radius: 6px; cursor: pointer; padding: 0 8px; }
+.zoom button:hover { border-color: var(--text-muted); }
+#zlvl { min-width: 40px; text-align: center; font-variant-numeric: tabular-nums; }
+#tlscroll svg.timeline { max-width: none; }
+.tlbox.full { position: fixed; inset: 0; z-index: 20; background: var(--surface-0); padding: 18px 24px; overflow: auto; }
+body.nofloat .rail, body.nofloat .theme { display: none; }
+.stepkey li { padding: 1px 5px; border-radius: 4px; cursor: default; }
+.stepkey li.hl { background: var(--t2); color: #fff; } .stepkey li.hl b { color: #fff; }
+svg .band.hl { fill: color-mix(in srgb, var(--t2) 14%, transparent); }
+svg .stepdot.hl { fill: var(--t2); stroke: var(--t2); } svg .steplbl.hl { fill: #fff; } svg .steptick.hl { stroke: var(--t2); opacity: 1; }
+svg .lblbg { fill: var(--surface-0); } svg .steplbl { pointer-events: none; } svg .stepdot { cursor: pointer; }
 </style>
 </head>
 <body>
@@ -252,9 +267,19 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 <section id="session">
   <div class="eyebrow">Session timeline</div>
   <h2>{{SESSION_T}}</h2>
-  {{LEGEND}}
-  <div class="scroll">{{TIMELINE}}</div>
-  <ul class="stepkey">{{STEPKEY}}</ul>
+  <div class="tlbox" id="tlbox">
+    <div class="tlbar">
+      {{LEGEND}}
+      <div class="zoom" role="group" aria-label="Zoom the timeline">
+        <button type="button" data-zoom="-1" aria-label="Zoom out">−</button>
+        <span id="zlvl">100%</span>
+        <button type="button" data-zoom="1" aria-label="Zoom in">+</button>
+        <button type="button" id="tlfull" aria-pressed="false">Full screen</button>
+      </div>
+    </div>
+    <div class="scroll" id="tlscroll">{{TIMELINE}}</div>
+    <ul class="stepkey">{{STEPKEY}}</ul>
+  </div>
 </section>
 
 <section id="actions">
@@ -409,6 +434,51 @@ document.querySelectorAll("[data-copy]").forEach(function (b) {
     setTimeout(function () { b.textContent = "Copy"; }, 1600);
   });
 });
+
+(function () {
+  var box = document.getElementById("tlbox"); if (!box) return;
+  var svg = box.querySelector("svg.timeline"), sc = document.getElementById("tlscroll");
+  var lvl = document.getElementById("zlvl"), full = document.getElementById("tlfull");
+  var left = +svg.dataset.left, tmax = +svg.dataset.tmax, H = +svg.dataset.h;
+  var steps = [1, 1.5, 2, 3, 4, 6], z = 0;
+  var els = Array.prototype.slice.call(svg.querySelectorAll("[data-t], [data-t0], .tlane"));
+  // Zoom stretches the time axis only; text keeps its size because the viewBox matches the pixel width.
+  function layout() {
+    var W = Math.max(sc.clientWidth, 760) * steps[z];
+    var x = function (t) { return left + (W - left - 10) * t / tmax; };
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.style.width = W + "px"; svg.style.minWidth = W + "px";
+    els.forEach(function (el) {
+      if (el.classList.contains("tlane")) { el.setAttribute("x2", W - 10); return; }
+      if (el.dataset.t0 !== undefined) { var a = x(+el.dataset.t0); el.setAttribute("x", a); el.setAttribute("width", Math.max(1, x(+el.dataset.t1) - a)); return; }
+      var v = x(+el.dataset.t);
+      if (el.tagName === "circle") el.setAttribute("cx", v);
+      else if (el.tagName === "line") { el.setAttribute("x1", v); el.setAttribute("x2", v); }
+      else el.setAttribute("x", v + (+(el.dataset.dx || 0)));
+    });
+    lvl.textContent = Math.round(steps[z] * 100) + "%";
+  }
+  box.querySelectorAll("[data-zoom]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var frac = (sc.scrollLeft + sc.clientWidth / 2) / sc.scrollWidth;
+      z = Math.max(0, Math.min(steps.length - 1, z + (+b.dataset.zoom))); layout();
+      sc.scrollLeft = frac * sc.scrollWidth - sc.clientWidth / 2;
+    });
+  });
+  function setFull(on) {
+    box.classList.toggle("full", on); document.body.classList.toggle("nofloat", on);
+    full.setAttribute("aria-pressed", on ? "true" : "false"); full.textContent = on ? "Close" : "Full screen"; layout();
+  }
+  full.addEventListener("click", function () { setFull(!box.classList.contains("full")); });
+  addEventListener("keydown", function (e) { if (e.key === "Escape" && box.classList.contains("full")) setFull(false); });
+  var lbls = svg.querySelector(".lanelbls");
+  sc.addEventListener("scroll", function () { lbls.setAttribute("transform", "translate(" + sc.scrollLeft + " 0)"); }, { passive: true });
+  addEventListener("resize", layout);
+  layout();
+  function hl(i, on) { box.querySelectorAll('[data-step="' + i + '"]').forEach(function (el) { el.classList.toggle("hl", on); }); }
+  box.addEventListener("mouseover", function (e) { var t = e.target.closest("[data-step]"); if (t) hl(t.dataset.step, true); });
+  box.addEventListener("mouseout", function (e) { var t = e.target.closest("[data-step]"); if (t) hl(t.dataset.step, false); });
+})();
 </script>
 </body>
 </html>

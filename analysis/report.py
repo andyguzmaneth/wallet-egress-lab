@@ -116,30 +116,33 @@ def svg_timeline(a) -> str:
     W, left, lane_h, top = 1000, 150, 22, 58
     H = top + lane_h * len(lanes) + 80
     x = lambda t: left + (W - left - 10) * (t / tmax)
-    out = [f'<svg viewBox="0 0 {W} {H}" class="timeline" role="img" aria-label="Every request over the journey, by operator and tier">']
+    out = [f'<svg viewBox="0 0 {W} {H}" class="timeline" data-left="{left}" data-tmax="{tmax:.2f}" data-h="{H}" role="img" aria-label="Every request over the journey, by operator and tier">']
     for i, w in enumerate(a["windows"]):
         x0, x1 = x(w["t0"] - t0), x(w["t1"] - t0)
-        out.append(f'<rect x="{x0:.1f}" y="{top - 4}" width="{max(1, x1 - x0):.1f}" height="{lane_h * len(lanes) + 4}" class="band b{i % 2}"><title>{esc(STEP_LABELS.get(w["name"], w["name"]))}</title></rect>')
+        out.append(f'<rect x="{x0:.1f}" y="{top - 4}" width="{max(1, x1 - x0):.1f}" height="{lane_h * len(lanes) + 4}" class="band b{i % 2}" data-step="{i}" data-t0="{w["t0"] - t0:.2f}" data-t1="{w["t1"] - t0:.2f}"/>')
     # Step numbers on two staggered rows, so short steps keep a label.
     last = [-99.0, -99.0]
     for i, w in enumerate(a["windows"]):
         x0, x1 = x(w["t0"] - t0), x(w["t1"] - t0)
         cx = (x0 + x1) / 2
+        tc = (w["t0"] + w["t1"]) / 2 - t0
         row = 0 if cx - last[0] >= 20 else 1
         last[row] = cx
         y = top - 34 + row * 16
-        out.append(f'<line x1="{cx:.1f}" x2="{cx:.1f}" y1="{y + 3}" y2="{top - 4}" class="steptick"/>')
-        out.append(f'<circle cx="{cx:.1f}" cy="{y - 4}" r="7.5" class="stepdot"><title>{esc(STEP_LABELS.get(w["name"], w["name"]))}</title></circle>')
-        out.append(f'<text x="{cx:.1f}" y="{y}" class="steplbl" text-anchor="middle">{i + 1}</text>')
+        lbl = esc(f'{i + 1}. {STEP_LABELS.get(w["name"], w["name"])}')
+        out.append(f'<line x1="{cx:.1f}" x2="{cx:.1f}" y1="{y + 3}" y2="{top - 4}" class="steptick" data-step="{i}" data-t="{tc:.2f}"/>')
+        out.append(f'<circle cx="{cx:.1f}" cy="{y - 4}" r="7.5" class="stepdot" data-step="{i}" data-t="{tc:.2f}" data-tip="{lbl}"/>')
+        out.append(f'<text x="{cx:.1f}" y="{y}" class="steplbl" text-anchor="middle" data-step="{i}" data-t="{tc:.2f}">{i + 1}</text>')
+    labels = [f'<rect x="0" y="{top - 4}" width="{left - 2}" height="{lane_h * len(lanes) + 4}" class="lblbg"/>']
     for li, lane in enumerate(lanes):
         y = top + li * lane_h + lane_h / 2
-        out.append(f'<text x="{left - 8}" y="{y + 4:.1f}" text-anchor="end" class="lanelbl">{esc(lane)}</text>')
-        out.append(f'<line x1="{left}" x2="{W - 10}" y1="{y:.1f}" y2="{y:.1f}" class="lane"/>')
+        labels.append(f'<text x="{left - 8}" y="{y + 4:.1f}" text-anchor="end" class="lanelbl">{esc(lane)}</text>')
+        out.append(f'<line x1="{left}" x2="{W - 10}" y1="{y:.1f}" y2="{y:.1f}" class="lane tlane"/>')
     for r in sorted(reqs, key=lambda r: r["tier"]):
         li = lanes.index(op_bucket(r["operator"]))
         y = top + li * lane_h + lane_h / 2
         tip = f'{STEP_LABELS.get(r["step"], r["step"])} · {r["host"]}{r["path"]} · {TIER_NAMES[r["tier"]]} · {r["ms"]:.0f} ms'
-        out.append(f'<rect x="{x(r["t"] - t0):.1f}" y="{y - 7:.1f}" width="2" height="14" rx="1" class="t{r["tier"]}" data-tip="{esc(tip)}"/>')
+        out.append(f'<rect x="{x(r["t"] - t0):.1f}" y="{y - 7:.1f}" width="2" height="14" rx="1" class="t{r["tier"]} req" data-t="{r["t"] - t0:.2f}" data-tip="{esc(tip)}"/>')
     # Annotations: a few notes that carry the story, under the lanes.
     base = top + lane_h * len(lanes) + 2
     win = {w["name"]: w for w in a["windows"]}
@@ -147,7 +150,7 @@ def svg_timeline(a) -> str:
     def at(step, text):
         if step in win:
             w = win[step]
-            notes.append((x((w["t0"] + w["t1"]) / 2 - t0), text))
+            notes.append((x((w["t0"] + w["t1"]) / 2 - t0), text, (w["t0"] + w["t1"]) / 2 - t0))
     n_create = sum(1 for r in reqs if r["step"] == "create_safe")
     at("create_safe", f"Create Safe: {num(n_create)} requests")
     n_cow = sum(1 for r in reqs if r["step"] == "swap_quote" and r["operator"] == "CoW Protocol")
@@ -159,7 +162,7 @@ def svg_timeline(a) -> str:
     if n_saferpc:
         at("custom_rpc_set", f"Custom RPC set: Safe RPC still called {n_saferpc}×")
     right = [-999.0, -999.0, -999.0]   # right edge of the last note in each row
-    for nx, text in sorted(notes):
+    for nx, text, nt in sorted(notes):
         wtxt = len(text) * 6.8
         anchor = "end" if nx + wtxt > W - 6 else "start"
         l, r_ = (nx - wtxt - 4, nx) if anchor == "end" else (nx, nx + wtxt + 4)
@@ -167,11 +170,13 @@ def svg_timeline(a) -> str:
         right[row] = r_
         ty = base + 18 + row * 16
         tx = nx + (-4 if anchor == "end" else 4)
-        out.append(f'<line x1="{nx:.1f}" x2="{nx:.1f}" y1="{base - 6}" y2="{ty - 3}" class="annline"/>')
-        out.append(f'<circle cx="{nx:.1f}" cy="{base - 6}" r="2.5" class="anndot"/>')
-        out.append(f'<text x="{tx:.1f}" y="{ty}" class="ann" text-anchor="{anchor}">{esc(text)}</text>')
-    for m in range(0, int(tmax / 60) + 1, 5):
-        out.append(f'<text x="{x(m * 60):.1f}" y="{H - 6}" class="axis" text-anchor="middle">{m} min</text>')
+        out.append(f'<line x1="{nx:.1f}" x2="{nx:.1f}" y1="{base - 6}" y2="{ty - 3}" class="annline" data-t="{nt:.2f}"/>')
+        out.append(f'<circle cx="{nx:.1f}" cy="{base - 6}" r="2.5" class="anndot" data-t="{nt:.2f}"/>')
+        out.append(f'<text x="{tx:.1f}" y="{ty}" class="ann" text-anchor="{anchor}" data-t="{nt:.2f}" data-dx="{tx - nx:.0f}">{esc(text)}</text>')
+    for m in range(0, int(tmax / 60) + 1, 5 if tmax < 1800 else 10):
+        out.append(f'<text x="{x(m * 60):.1f}" y="{H - 6}" class="axis" text-anchor="middle" data-t="{m * 60}">{m} min</text>')
+    # Lane names last, in a group the page script keeps pinned to the left edge while scrolling.
+    out.append('<g class="lanelbls">' + "".join(labels) + "</g>")
     out.append("</svg>")
     return "".join(out)
 
@@ -513,7 +518,7 @@ def main():
         "FB": str(to_backend), "FR": str(to_rpc), "FS": str(to_safe_other), "FT": str(to_third), "FC": str(max(to_custom, 0)),
         "THIRDADDR": esc(", ".join(third_addr) or "none"), "NTHIRDADDR": str(len(third_addr)),
         "IDLERPM": f"{idle_rpm:.0f}", "GA": str(len(ga)), "GAADDR": str(len(ga_addr)),
-        "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a), "LATSVG": svg_latency(proj), "UNITS": svg_units(reqs), "REPRO": repro_html("Run it yourself: one command per step, about 30 minutes"), "LEGEND": legend(),
+        "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a), "LATSVG": svg_latency(proj), "UNITS": svg_units(reqs), "REPRO": repro_html("Run it yourself"), "LEGEND": legend(),
         "ROUTING": routing(reqs), "BREAKDOWN": breakdown(sens), "RAILMAINNET": '<li><a href="#mainnet" data-rail="mainnet"><span class="tick"></span><span class="label">Mainnet pass</span></a></li>' if m else "", "BACK": esc(args.back),
         "DATE": time.strftime("%Y-%m-%d", time.gmtime(a["t0"])), "NSTEPS": str(len(a["windows"])), "INV": "".join(inv_rows), "MATRIX": "".join(mat_rows), "PROJ": proj_rows,
         "CUSTOM": esc(custom_note), "MAINNET": mainnet_html, "FAILS": fail_note,
@@ -522,7 +527,7 @@ def main():
         "TIERHELP": "".join(
             f'<li><span><i class="sw t{t}"></i><b>{esc(TIER_NAMES[t])}.</b> {esc(TIER_HELP[t])}</span>'
             f'<span class="n">{num(tc[t])} requests</span></li>' for t in range(4)),
-        "STEPKEY": "".join(f'<li><b>{i + 1}</b> {esc(STEP_LABELS.get(w["name"], w["name"]))}</li>' for i, w in enumerate(a["windows"])),
+        "STEPKEY": "".join(f'<li data-step="{i}"><b>{i + 1}</b> {esc(STEP_LABELS.get(w["name"], w["name"]))}</li>' for i, w in enumerate(a["windows"])),
     } | titles).items():
         page = page.replace("{{" + k + "}}", v)
     out = Path(args.out) if args.out else Path(args.site) / "runs" / a["run"] / "index.html"
@@ -636,38 +641,16 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
 
 REPO = "https://github.com/andyguzmaneth/wallet-egress-lab"
 REPRO_CMDS = """git clone https://github.com/andyguzmaneth/wallet-egress-lab && cd wallet-egress-lab
-npm install && npx playwright install chromium
-uv tool install mitmproxy                        # mitmdump on PATH; Xvfb from your distro
-
-npx tsx driver/keys.ts                           # owner keys A, B and outside account R
-FUNDER_KEY=0x... npx tsx driver/keys.ts fund     # sends about 0.4 Sepolia ETH to A, B, R
-
-scripts/run.sh baseline                          # blank browser, about 3 min
-scripts/run.sh sepolia                           # full journey, about 20 min
-MITM_PORT=8083 scripts/run.sh mainnet            # read-only pass, about 7 min
-
-python3 -I analysis/analyze.py runs/<run> --baseline runs/<baseline-run>   # once per run
-python3 -I analysis/report.py --sepolia runs/<sepolia-run> --mainnet runs/<mainnet-run> --site docs"""
-REPRO_TECH = [
-    ("Capture every request with bodies", "mitmproxy addon, browser QUIC off", "capture/record.py"),
-    ("Keep keys out of the capture", "injected EIP-1193 signer in Node", "driver/signer.ts"),
-    ("Script the user", "Playwright steps with start and end markers", "driver/journey.ts"),
-    ("Remove the browser's own traffic", "blank-page baseline run", "scripts/run.sh baseline"),
-    ("Find what each request reveals", "search URLs, headers, bodies for known identifiers", "analysis/analyze.py"),
-    ("Estimate latency cost", "longest sequential chain x added latency per hop", "analysis/report.py"),
-]
+npm install && npx playwright install chromium && uv tool install mitmproxy
+scripts/run.sh sepolia     # setup, keys and the full command list are in the README"""
 
 
 def repro_html(heading: str) -> str:
-    rows = "".join(f"<tr><td>{esc(a)}</td><td class=sub>{esc(b)}</td><td><code>{esc(c)}</code></td></tr>" for a, b, c in REPRO_TECH)
     return f"""<section id="reproduce">
   <div class="eyebrow">Reproduce</div>
   <h2>{heading}</h2>
-  <p>You need Linux with Node 20 or later, Python 3.11 or later, Xvfb, and one Sepolia key with about 0.4 ETH. Source and README: <a href="{REPO}">{REPO.removeprefix("https://")}</a>.</p>
+  <p>Setup, method and techniques are in the <a href="{REPO}">repository README</a>. Testing another wallet means replacing the steps in <code>driver/journey.ts</code>.</p>
   <div class="codebox"><button type="button" class="copy" data-copy>Copy</button><pre><code>{esc(REPRO_CMDS)}</code></pre></div>
-  <h3>Techniques and where they live</h3>
-  <div class="scroll"><table class="mini repro">{rows}</table></div>
-  <p class="sub">To test another wallet, replace the steps in <code>driver/journey.ts</code>; capture, analysis and report stay the same. Each run adds a folder under <code>docs/runs/</code> and a row in the run index.</p>
 </section>"""
 
 

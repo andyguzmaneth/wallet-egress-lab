@@ -71,23 +71,10 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
   <section id="reproduce">
   <div class="eyebrow">Reproduce</div>
   <h2>Run it yourself</h2>
-  <p>You need Linux with Node 20 or later, Python 3.11 or later, Xvfb, and one Sepolia key with about 0.4 ETH. Source and README: <a href="https://github.com/andyguzmaneth/wallet-egress-lab">github.com/andyguzmaneth/wallet-egress-lab</a>.</p>
+  <p>Setup, method and techniques are in the <a href="https://github.com/andyguzmaneth/wallet-egress-lab">repository README</a>. Testing another wallet means replacing the steps in <code>driver/journey.ts</code>.</p>
   <div class="codebox"><button type="button" class="copy" data-copy>Copy</button><pre><code>git clone https://github.com/andyguzmaneth/wallet-egress-lab &amp;&amp; cd wallet-egress-lab
-npm install &amp;&amp; npx playwright install chromium
-uv tool install mitmproxy                        # mitmdump on PATH; Xvfb from your distro
-
-npx tsx driver/keys.ts                           # owner keys A, B and outside account R
-FUNDER_KEY=0x... npx tsx driver/keys.ts fund     # sends about 0.4 Sepolia ETH to A, B, R
-
-scripts/run.sh baseline                          # blank browser, about 3 min
-scripts/run.sh sepolia                           # full journey, about 20 min
-MITM_PORT=8083 scripts/run.sh mainnet            # read-only pass, about 7 min
-
-python3 -I analysis/analyze.py runs/&lt;run&gt; --baseline runs/&lt;baseline-run&gt;   # once per run
-python3 -I analysis/report.py --sepolia runs/&lt;sepolia-run&gt; --mainnet runs/&lt;mainnet-run&gt; --site docs</code></pre></div>
-  <h3>Techniques and where they live</h3>
-  <div class="scroll"><table class="mini repro"><tr><td>Capture every request with bodies</td><td class=sub>mitmproxy addon, browser QUIC off</td><td><code>capture/record.py</code></td></tr><tr><td>Keep keys out of the capture</td><td class=sub>injected EIP-1193 signer in Node</td><td><code>driver/signer.ts</code></td></tr><tr><td>Script the user</td><td class=sub>Playwright steps with start and end markers</td><td><code>driver/journey.ts</code></td></tr><tr><td>Remove the browser&#x27;s own traffic</td><td class=sub>blank-page baseline run</td><td><code>scripts/run.sh baseline</code></td></tr><tr><td>Find what each request reveals</td><td class=sub>search URLs, headers, bodies for known identifiers</td><td><code>analysis/analyze.py</code></td></tr><tr><td>Estimate latency cost</td><td class=sub>longest sequential chain x added latency per hop</td><td><code>analysis/report.py</code></td></tr></table></div>
-  <p class="sub">To test another wallet, replace the steps in <code>driver/journey.ts</code>; capture, analysis and report stay the same. Each run adds a folder under <code>docs/runs/</code> and a row in the run index.</p>
+npm install &amp;&amp; npx playwright install chromium &amp;&amp; uv tool install mitmproxy
+scripts/run.sh sepolia     # setup, keys and the full command list are in the README</code></pre></div>
 </section>
   <footer>1 run.</footer>
 </main>
