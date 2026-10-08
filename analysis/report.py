@@ -428,7 +428,6 @@ def main():
     tc = Counter(r["tier"] for r in reqs)
     inv = inventory(a)
     mat = matrix(a)
-    mat_max = max((c[i] for _, c in mat for i in ID_COLS), default=1)
 
     custom_note = ""
     cr = [r for r in reqs if r["step"].startswith("custom_rpc")]
@@ -472,12 +471,11 @@ def main():
 
     mat_rows = []
     for o, c in mat:
-        cells = []
-        for i in ID_COLS:
-            v = c[i]
-            lvl = 0 if not v else 1 + min(4, int(5 * v / (mat_max + 1)))
-            cells.append(f'<td class="num heat h{lvl}">{num(v) if v else "·"}</td>')
-        mat_rows.append(f'<tr><th scope=row>{esc(o)}</th><td class=num>{num(c["_total"])}</td>{"".join(cells)}<td class="num heat h{0 if not c["_intent"] else 1 + min(4, int(5 * c["_intent"] / (mat_max + 1)))}">{c["_intent"] or "·"}</td></tr>')
+        vals = [c[i] for i in ID_COLS] + [c["_intent"]]
+        top = max(vals)
+        cells = "".join(
+            f'<td class="num heat{" top" if v and v == top else ""}">{num(v) if v else "·"}</td>' for v in vals)
+        mat_rows.append(f'<tr><th scope=row>{esc(o)}</th><td class=num>{num(c["_total"])}</td>{cells}</tr>')
 
     proj_rows = "".join(
         f'<tr><td>{esc(STEP_LABELS.get(x["step"], x["step"]))}</td><td class=num>{x["n"]}</td>'

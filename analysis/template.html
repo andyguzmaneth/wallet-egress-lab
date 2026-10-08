@@ -104,7 +104,10 @@ th.sortable { cursor: pointer; user-select: none; }
 th.sortable:after { content: " ↕"; color: var(--text-muted); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sub { color: var(--text-muted); font-size: 11.5px; margin-top: 2px; word-break: break-word; }
-.heat { color: var(--text-primary); }
+.heat { color: var(--text-muted); }
+.heat.top { color: #fff; background: var(--t2); font-weight: 600; }
+:root[data-theme="dark"] .heat.top { color: #0b0b0b; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .heat.top { color: #0b0b0b; } }
 .h0 { color: var(--text-muted); } .h1 { background: var(--h1); } .h2 { background: var(--h2); }
 .h3 { background: var(--h3); color: #fff; } .h4 { background: var(--h4); color: #fff; } .h5 { background: var(--h5); color: #fff; }
 :root[data-theme="dark"] .h5 { color: #0b0b0b; }
@@ -234,7 +237,7 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 <section id="who">
   <div class="eyebrow">Who learns what</div>
   <h2>{{WHO_T}}</h2>
-  <p>Requests per receiver that carry each identifier. Every request also carries the IP address.</p>
+  <p>Requests per receiver that carry each identifier; the highlighted cell is what each receiver sees most. Every request also carries the IP address.</p>
   <div class="scroll"><table>
     <thead><tr><th>Receiver</th><th class=num>All requests</th><th class=num>Safe address</th><th class=num>Owner address</th><th class=num>Counterparty</th><th class=num>Tx hash / order id</th><th class=num>Client ID</th><th class=num>Intent</th></tr></thead>
     <tbody>{{MATRIX}}</tbody>
