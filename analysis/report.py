@@ -347,16 +347,118 @@ def shape(r) -> str:
     return (r["host"] if bucket(r) == "Third parties" else "") + (path[:70] + ("…" if len(path) > 70 else ""))
 
 
-def breakdown(sens) -> str:
+REDACT_HEADERS = {"cookie", "authorization", "x-api-key"}
+SHOW_HEADERS = ["content-type", "origin", "referer", "cookie", "authorization", "x-api-key"]
+
+
+def load_flows(run_dir) -> dict:
+    flows = {}
+    for line in (Path(run_dir) / "flows.jsonl").read_text().splitlines():
+        if line.strip():
+            r = json.loads(line)
+            if r.get("kind") == "http":
+                flows[r["id"]] = r
+    return flows
+
+
+def example_html(rec, known) -> str:
+    """Render one captured request with the identifying parts marked."""
+    from urllib.parse import urlsplit, parse_qsl, unquote
+    u = urlsplit(rec["url"])
+    lines = [f'{rec["method"]} {u.scheme}://{u.netloc}{unquote(u.path)}']
+    q = parse_qsl(u.query, keep_blank_values=True)
+    if len(u.query) > 100:
+        lines += [f"  {'?' if i == 0 else '&'}{k}={v}" for i, (k, v) in enumerate(q)]
+    elif u.query:
+        lines[0] += "?" + unquote(u.query)
+    for k, v in rec["req_headers"]:
+        if k.lower() in SHOW_HEADERS:
+            lines.append(f"{k}: " + (f"[{len(v)} bytes, redacted]" if k.lower() in REDACT_HEADERS else v[:160]))
+    body = rec["req_body"].get("text") or ""
+    if body:
+        try:
+            body = json.dumps(json.loads(body), indent=1)
+        except ValueError:
+            body = "\n".join(ln.replace("&", "\n&") if len(ln) > 200 and "=" in ln else ln for ln in body.split("\n"))
+        lines += ["", body]
+    text = "\n".join(lines)
+    pats = []
+    for label, vals in known.items():
+        for v in vals:
+            bare = v[2:] if v.lower().startswith("0x") else v
+            pats.append((re.compile(r"(?:0x)?" + re.escape(bare), re.I), "m-tx" if label.startswith("Tx") else "m-addr", label))
+    pats.append((re.compile(r"(?<=cid=)[0-9.]+"), "m-id", "Persistent client ID"))
+    pats.append((re.compile(r"did:key:[A-Za-z0-9]+"), "m-id", "Persistent client ID"))
+    pats.append((re.compile(r"\[\d+ bytes, redacted\]"), "m-id", "Cookie or token"))
+    pats.append((re.compile(r"gcs=G100|pscdl=denied"), "m-ctx", "Analytics consent denied"))
+    spans = sorted((mt.start(), mt.end(), cls, label) for rx, cls, label in pats for mt in rx.finditer(text))
+    keep = []
+    for sp in spans:
+        if not keep or sp[0] >= keep[-1][1]:
+            keep.append(sp)
+    # Long payloads: keep the request line and the marked lines, with one line of context.
+    starts = [0] + [m_.end() for m_ in re.finditer("\n", text)]
+    line_of = lambda pos: max(k for k, st in enumerate(starts) if st <= pos)
+    if len(starts) > 22 and keep:
+        sel = {0}
+        for a0, b0, *_ in keep:
+            for ln in range(line_of(a0) - 1, line_of(b0) + 2):
+                if 0 <= ln < len(starts):
+                    sel.add(ln)
+        ranges = []
+        for ln in sorted(sel):
+            if ranges and ln == ranges[-1][1] + 1:
+                ranges[-1][1] = ln
+            else:
+                ranges.append([ln, ln])
+        end_of = lambda ln: (starts[ln + 1] - 1) if ln + 1 < len(starts) else len(text)
+        wins = [(starts[a_], end_of(b_)) for a_, b_ in ranges]
+    else:
+        wins = [(0, min(len(text), 2400))]
+    out = []
+    for wi, (a1, b1) in enumerate(wins):
+        if wi or a1:
+            prev = wins[wi - 1][1] if wi else 0
+            gap = text.count(chr(10), prev, a1) - 1 if wi else text.count(chr(10), 0, a1)
+            out.append(f'\n<span class="fold">… {gap} line{"s" if gap != 1 else ""}</span>\n')
+        pos = a1
+        for a0, b0, cls, label in keep:
+            if a0 < a1 or b0 > b1:
+                continue
+            out.append(esc(text[pos:a0]))
+            out.append(f'<mark class="{cls}" title="{esc(label)}">{esc(text[a0:b0])}</mark>')
+            pos = b0
+        out.append(esc(text[pos:b1]))
+    if wins[-1][1] < len(text):
+        out.append(f'\n<span class="fold">… {text.count(chr(10), wins[-1][1])} more lines</span>')
+    labels = sorted({label for *_, label in keep})
+    legend = "".join(f'<span class="tag">{esc(l)}</span>' for l in labels)
+    return (f'<div class="exhead"><span class="sub">Example request. The receiver also sees</span> <mark class="m-id">your IP address</mark>'
+            f'{" <span class=sub>and</span> " + legend if legend else ""}</div><pre class="expre">{"".join(out)}</pre>')
+
+
+def breakdown(sens, flows=None, known=None) -> str:
     ids = {"Safe backend API": "backend", "Safe RPC": "rpc", "Safe web app": "web", "Third parties": "third", "Custom RPC": "custom"}
     out = []
     for b, key in ids.items():
         rs = [r for r in sens if bucket(r) == b]
         rows = []
-        for (o, c), n in Counter((r["operator"], r["category"]) for r in rs).most_common(8):
-            ex = Counter(shape(r) for r in rs if r["category"] == c and r["operator"] == o).most_common(1)[0][0]
+        for j, ((o, c), n) in enumerate(Counter((r["operator"], r["category"]) for r in rs).most_common(8)):
+            mine = [r for r in rs if r["category"] == c and r["operator"] == o]
+            ex = Counter(shape(r) for r in mine).most_common(1)[0][0]
             who = f"{esc(o)} · " if b == "Third parties" else ""
-            rows.append(f"<tr><td class=num>{n}</td><td>{who}{esc(c)}<div><code>{esc(ex)}</code></div></td></tr>")
+            pick = None
+            if flows:
+                cands = [r for r in mine if r.get("fid") in flows]
+                cands.sort(key=lambda r: (-len(r["ids"]), not flows[r["fid"]]["req_body"].get("text"), r["t"]))
+                pick = cands[0] if cands else None
+            if pick:
+                xid = f"ex-{key}-{j}"
+                rows.append(f'<tr class="bdrow" tabindex="0" role="button" aria-expanded="false" aria-controls="{xid}"><td class=num>{n}</td>'
+                            f'<td>{who}{esc(c)}<div><code>{esc(ex)}</code></div></td><td class="exhint">Example</td></tr>'
+                            f'<tr class="exrow" id="{xid}" hidden><td></td><td colspan="2">{example_html(flows[pick["fid"]], known or {})}</td></tr>')
+            else:
+                rows.append(f"<tr><td class=num>{n}</td><td>{who}{esc(c)}<div><code>{esc(ex)}</code></div></td><td></td></tr>")
         out.append(f'<div class="bdp" id="bd-{key}" hidden><h4>{esc(b)}: {len(rs)} address-linked requests</h4>'
                    f'<table>{"".join(rows) or "<tr><td>None</td></tr>"}</table></div>')
     return "".join(out)
@@ -391,6 +493,7 @@ def main():
 
     reqs = [r for r in a["requests"] if not r["preflight"]]
     pre = [r for r in a["requests"] if r["preflight"]]
+    flows = load_flows(args.sepolia)
     dur_min = (max(r["t"] for r in reqs) - a["t0"]) / 60
     sens = [r for r in reqs if r["tier"] >= 2]
     to_backend = sum(1 for r in sens if r["host"] in ("safe-client.safe.global", "api.safe.global"))
@@ -523,7 +626,7 @@ def main():
         "THIRDADDR": esc(", ".join(third_addr) or "none"), "NTHIRDADDR": str(len(third_addr)),
         "IDLERPM": f"{idle_rpm:.0f}", "GA": str(len(ga)), "GAADDR": str(len(ga_addr)),
         "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a), "LATSVG": svg_latency(proj), "UNITS": svg_units(reqs), "REPRO": repro_html("Run it yourself"), "LEGEND": legend(),
-        "ROUTING": routing(reqs), "BREAKDOWN": breakdown(sens), "RAILMAINNET": '<li><a href="#mainnet" data-rail="mainnet"><span class="tick"></span><span class="label">Mainnet pass</span></a></li>' if m else "", "BACK": esc(args.back),
+        "ROUTING": routing(reqs), "BREAKDOWN": breakdown(sens, flows, a.get("known_values")), "RAILMAINNET": '<li><a href="#mainnet" data-rail="mainnet"><span class="tick"></span><span class="label">Mainnet pass</span></a></li>' if m else "", "BACK": esc(args.back),
         "DATE": time.strftime("%Y-%m-%d", time.gmtime(a["t0"])), "NSTEPS": str(len(a["windows"])), "INV": "".join(inv_rows), "MATRIX": "".join(mat_rows), "PROJ": proj_rows,
         "CUSTOM": esc(custom_note), "MAINNET": mainnet_html, "FAILS": fail_note,
         "COOKIES": "necessary only" if a.get("cookies") == "necessary" else "accept all",
@@ -540,7 +643,7 @@ def main():
     print("wrote", out)
 
     # The brief: same data, one screen of argument, evidence in an appendix.
-    groups = [("Remove, or do it locally", "No added latency"), ("Hide the origin", f"+{OHTTP * 1000:.0f} ms per call"), ("Hide the content", f"+{PIR} s per lookup")]
+    groups = [("Remove, or do it locally", "No added latency"), ("Hide the origin: anon-RPC or a relay", f"+{TOR} s per call over Tor, +{OHTTP * 1000:.0f} ms over a relay"), ("Hide the content: PIR", f"+{PIR} s per lookup")]
     fix_html = []
     for gi, (gname, gcost) in enumerate(groups):
         rows = [x for x in acts if x[0] == gi]
@@ -555,7 +658,7 @@ def main():
     free = sum(1 for x in acts if x[5] in ("No added latency", "Faster"))
     brief_vals = {
         "THESIS": f"Hiding the IP on Safe's RPC covers {pct(to_rpc, len(sens))} of the requests that link a Safe to its owner; {pct(to_backend, len(sens))} go to Safe's backend. "
-                  f"A relay in front of the backend, and {free} fixes that add no latency, cover most of the rest.",
+                  f"anon-RPC or a relay for the backend, PIR for balances and sanctions, and {free} fixes that add no latency cover most of the rest.",
         "PICT_T": f"{num(len(reqs))} requests in {dur_min:.0f} minutes; {num(len(sens))} carry the Safe or an owner address",
         "FIX_T": f"{len(acts)} changes; {free} of them add no latency",
         "FIXES": "".join(fix_html),
@@ -565,7 +668,7 @@ def main():
     for k, v in (brief_vals | {
         "RUN": esc(a["run"]), "DATE": time.strftime("%Y-%m-%d", time.gmtime(a["t0"])), "BACK": esc(args.back),
         "NSTEPS": str(len(a["windows"])), "DUR": f"{dur_min:.0f}", "LEGEND": legend(), "UNITS": svg_units(reqs),
-        "BREAKDOWN": breakdown(sens), "LATSVG": svg_latency(proj), "PROJ": proj_rows, "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a),
+        "BREAKDOWN": breakdown(sens, flows, a.get("known_values")), "LATSVG": svg_latency(proj), "PROJ": proj_rows, "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a),
         "STEPKEY": "".join(f'<li data-step="{i}"><b>{i + 1}</b> {esc(STEP_LABELS.get(w["name"], w["name"]))}</li>' for i, w in enumerate(a["windows"])),
         "MATRIX": "".join(mat_rows), "INV": "".join(inv_rows), "LAT_T": titles["LAT_T"], "SESSION_T": titles["SESSION_T"],
         "TIERHELP": "".join(f'<li><span><i class="sw t{t}"></i><b>{esc(TIER_NAMES[t])}.</b> {esc(TIER_HELP[t])}</span><span class="n">{num(tc[t])} requests</span></li>' for t in range(4)),
@@ -625,9 +728,14 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
                   f"On an idle home screen the app sent {per_min:.0f} account-state requests per minute (Safe info, balances, queue, history), "
                   f"about one burst every {idle_gap(reqs, idle_win):.0f} s. Each carries the Safe address in the URL."))
         n_be = sum(1 for r in sens if r['host'] in ('safe-client.safe.global', 'api.safe.global'))
-        A.append((1, f"Safe's backend links the IP address to the Safe address, including transaction content before signing.", "Put an Oblivious HTTP relay, run by a separate operator, in front of the backend.",
-                  F[-1][1] + " The relay sees the IP address and not the request; the backend sees the request and not the IP address.",
-                  f"{num(n_be)} requests", f"+{OHTTP * 1000:.0f} ms per call"))
+        bal = [r for r in sens if r["host"] in ("safe-client.safe.global", "api.safe.global") and "/balances" in r["path"]]
+        A.append((1, "Safe's backend links the IP address to the Safe address, including transaction content before signing.", "Send backend calls through the anon-RPC transport (Tor), or an Oblivious HTTP relay where latency matters.",
+                  F[-1][1] + " The same Tor client that carries anon-RPC can carry these HTTPS calls. With a relay run by a separate operator, the relay sees the IP address and not the request; the backend sees the request and not the IP address.",
+                  f"{num(n_be)} requests", f"+{TOR} s Tor, +{OHTTP * 1000:.0f} ms relay"))
+        if bal:
+            A.append((2, "Balance reads from the backend name the Safe they ask about.", "Read balances and tokens with PIR instead.",
+                      f"{len(bal)} balance requests went to the backend. A PIR lookup returns the same data without the server learning which account was asked for.",
+                      f"{num(len(bal))} requests", f"+{PIR} s per PIR lookup"))
         A.append((0, f"The idle app asks the backend about the Safe every {idle_gap(reqs, idle_win):.0f} s.", "Poll less, and only when something changed.",
                   "Poll the Safe info endpoint only, fetch balances and history when its tags change, and back off when the tab is hidden.",
                   f"{per_min:.0f} per minute idle", "No added latency"))
@@ -646,9 +754,11 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
         F.append(("Owner and Safe addresses go to Safe's mainnet RPC during a Sepolia session.",
                   f"{len(sanc)} requests call the Chainalysis sanctions oracle (<code>isSanctioned</code>) for the Safe and its signers, and "
                   f"{len(ens)} requests do ENS reverse lookups, both on <code>rpc.safe.global/1</code>. A custom RPC does not change this path."))
-        A.append((0, "Safe's mainnet RPC gets sanctions checks and ENS lookups for the owners, even on Sepolia.", "Check a local sanctions list; resolve names through the user's RPC.",
-                  F[-1][1], f"{num(len(sanc) + len(ens))} requests", "Faster"))
-        R.append(("Check sanctions against a local list, and resolve names through the user's RPC.",
+        A.append((2, "Sanctions checks send the Safe and owner addresses to Safe's mainnet RPC, even on Sepolia.", "Check the sanctions list over PIR, or against a local copy.",
+                  F[-1][1], f"{num(len(sanc))} requests", f"+{PIR} s per PIR lookup"))
+        A.append((1, "ENS reverse lookups send the owner addresses to Safe's mainnet RPC.", "Resolve names over anon-RPC, through the user's chosen RPC.",
+                  "Names change rarely, so results can be cached; a PIR name index can replace the lookup later.", f"{num(len(ens))} requests", f"+{TOR} s per lookup"))
+        R.append(("Check sanctions over PIR or against a local copy, and resolve names over anon-RPC.",
                   f"Removes {len(sanc)} sanctions requests outright and moves {len(ens)} name lookups to the path the user picked. Local checks are faster than a round trip.", f"{num(len(sanc) + len(ens))} requests", "Faster"))
     # 4. Intent before chain
     scan = [r for r in reqs if r["category"] in ("Tx security scan", "Tx preview & simulation")]

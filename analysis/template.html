@@ -194,6 +194,21 @@ body.nofloat .rail, body.nofloat .theme { display: none; }
 svg .band.hl { fill: color-mix(in srgb, var(--t2) 14%, transparent); }
 svg .stepdot.hl { fill: var(--t2); stroke: var(--t2); } svg .steplbl.hl { fill: #fff; } svg .steptick.hl { stroke: var(--t2); opacity: 1; }
 svg .lblbg { fill: var(--surface-0); } svg .steplbl { pointer-events: none; } svg .stepdot { cursor: pointer; }
+
+.bdrow { cursor: pointer; } .bdrow:hover td, .bdrow:focus-visible td { background: color-mix(in srgb, var(--t2) 9%, transparent); }
+.bdrow[aria-expanded="true"] td { background: color-mix(in srgb, var(--t2) 13%, transparent); }
+.bdrow .exhint { color: var(--accent); font-size: 12px; font-weight: 600; text-align: right; white-space: nowrap; opacity: 0; }
+.bdrow:hover .exhint, .bdrow:focus-visible .exhint, .bdrow[aria-expanded="true"] .exhint { opacity: 1; }
+.bdrow .exhint::after { content: " \25B8"; } .bdrow[aria-expanded="true"] .exhint::after { content: " \25BE"; }
+.exrow td { padding-top: 2px; padding-bottom: 12px; }
+.exhead { font-size: 12.5px; margin: 2px 0 6px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.expre { margin: 0; padding: 10px 12px; background: var(--surface-1); border-left: 2px solid var(--t2); border-radius: 0 6px 6px 0; font: 11.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-all; max-height: 360px; overflow: auto; color: var(--text-secondary); }
+mark { border-radius: 3px; padding: 0 2px; font-weight: 700; color: var(--text-primary); }
+mark.m-addr { background: color-mix(in srgb, var(--t2) 30%, transparent); }
+mark.m-tx { background: color-mix(in srgb, var(--t3) 35%, transparent); }
+mark.m-id { background: color-mix(in srgb, var(--t1) 40%, transparent); }
+mark.m-ctx { background: none; outline: 1.5px solid var(--text-muted); }
+.expre .fold { color: var(--text-muted); font-style: italic; }
 </style>
 </head>
 <body>
@@ -420,7 +435,17 @@ svg .lblbg { fill: var(--surface-0); } svg .steplbl { pointer-events: none; } sv
 })();
 
 document.querySelectorAll(".fmore").forEach(function (b) {
-  b.addEventListener("click", function () { var d = b.nextElementSibling; d.hidden = false; b.hidden = true; b.setAttribute("aria-expanded", "true"); });
+  var d = b.nextElementSibling;
+  b.addEventListener("click", function () {
+    var open = d.hidden; d.hidden = !open;
+    b.textContent = open ? "less" : "more"; b.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) d.after(b); else d.before(b);
+  });
+});
+document.querySelectorAll(".bdrow").forEach(function (r) {
+  function t() { var x = document.getElementById(r.getAttribute("aria-controls")); x.hidden = !x.hidden; r.setAttribute("aria-expanded", x.hidden ? "false" : "true"); }
+  r.addEventListener("click", t);
+  r.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); t(); } });
 });
 
 document.querySelectorAll("[data-show]").forEach(function (b) {

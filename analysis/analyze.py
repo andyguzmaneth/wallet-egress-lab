@@ -297,6 +297,7 @@ def analyze(run: Path, baseline_hosts: set) -> dict:
             "up": r["req_wire_bytes"],
             "down": r["resp_wire_bytes"],
             "preflight": r["method"] == "OPTIONS",
+            "fid": r["id"],
         })
 
     return {
@@ -312,6 +313,7 @@ def analyze(run: Path, baseline_hosts: set) -> dict:
         "browser_noise": dict(browser_noise),
         "signer_calls": Counter(s["method"] for s in signer),
         "known_ids": {k: len(v) for k, v in known.items()},
+        "known_values": known,
     }
 
 
