@@ -118,11 +118,17 @@ h3 { font-size: 15px; margin: 22px 0 6px; }
 a { color: var(--accent, #2a78d6); }
 .kicker a.back { text-decoration: none; font-weight: 600; }
 .kicker a.back::before { content: "\2190  "; }
-details.drill { margin-top: 14px; }
-details.drill > summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--text-secondary); }
-.bd { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px 22px; margin-top: 12px; }
-.bd h4 { margin: 0 0 4px; font-size: 13.5px; display: flex; align-items: center; gap: 6px; }
-.bd table { font-size: 12.5px; } .bd td { padding: 4px 6px 4px 0; vertical-align: top; } .bd code { font-size: 11.5px; word-break: break-all; }\n.routing td { vertical-align: top; } .routing td:first-child { min-width: 220px; width: 38%; } .routing td:nth-child(4) { min-width: 200px; }
+.split .seg { font: inherit; font-size: 13px; text-align: left; border: 0; cursor: pointer; display: block; position: relative; }
+.split .seg .sub { display: block; }
+.split .seg:hover { filter: brightness(1.08); }
+.split .seg:focus-visible { outline: 2px solid var(--text-primary); outline-offset: -2px; }
+.split .seg[aria-expanded="true"] { box-shadow: inset 0 -4px 0 var(--text-primary); }
+.hint { margin: 4px 0 0; }
+.bdp { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; max-width: 760px; }
+.bdp[hidden] { display: none; }
+.bdp h4 { margin: 0 0 4px; font-size: 13.5px; display: flex; align-items: center; gap: 6px; }
+.bdp table { font-size: 13px; width: 100%; } .bdp td { padding: 4px 6px 4px 0; vertical-align: top; } .bdp code { font-size: 11.5px; word-break: break-all; }
+.routing td { vertical-align: top; } .routing td:first-child { min-width: 220px; width: 38%; } .routing td:nth-child(4) { min-width: 200px; }
 code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .tip { position: fixed; pointer-events: none; background: var(--text-primary); color: var(--surface-1); font-size: 12px; padding: 6px 8px; border-radius: 6px; max-width: 420px; z-index: 9; display: none; }
 .theme { position: absolute; top: 16px; right: 16px; font: inherit; font-size: 12px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
@@ -196,14 +202,15 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 <section id="where">
   <h2>Where address-linked requests go</h2>
   <p>Hiding the IP address on the RPC path covers only the RPC share. The rest goes to the Safe backend and to third parties, which see the same IP address and the same Safe address.</p>
-  <div class="split">
-    <div class="seg t3" style="flex:444"><b>Safe backend API</b> 52%<div class="sub">444 requests</div></div>
-    <div class="seg t2" style="flex:109"><b>Safe RPC</b> 13%<div class="sub">109</div></div>
-    <div class="seg t1 ink-dark" style="flex:103"><b>Safe web app</b> 12%<div class="sub">103</div></div>
-    <div class="seg t0 ink-dark" style="flex:190"><b>Third parties</b> 22%<div class="sub">190</div></div>
-    <div class="seg t0 ink-dark" style="flex:14; opacity:.6"><b>Custom RPC</b> 2%<div class="sub">14</div></div>
+  <p class="sub hint">Numbers are address-linked requests in the session. Select a segment to see what it contains.</p>
+  <div class="split" role="group" aria-label="Receivers">
+    <button type="button" class="seg t3" style="flex:444" data-b="backend" aria-expanded="false" aria-controls="bd-backend"><b>Safe backend API</b> 52%<span class="sub">444</span></button>
+    <button type="button" class="seg t2" style="flex:109" data-b="rpc" aria-expanded="false" aria-controls="bd-rpc"><b>Safe RPC</b> 13%<span class="sub">109</span></button>
+    <button type="button" class="seg t1 ink-dark" style="flex:103" data-b="web" aria-expanded="false" aria-controls="bd-web"><b>Safe web app</b> 12%<span class="sub">103</span></button>
+    <button type="button" class="seg t0 ink-dark" style="flex:190" data-b="third" aria-expanded="false" aria-controls="bd-third"><b>Third parties</b> 22%<span class="sub">190</span></button>
+    <button type="button" class="seg t0 ink-dark" style="flex:14; opacity:.6" data-b="custom" aria-expanded="false" aria-controls="bd-custom"><b>Custom RPC</b> 2%<span class="sub">14</span></button>
   </div>
-  <details class="drill"><summary>What these requests are</summary><div class="bd"><div><h4><i class="sw t3"></i>Safe backend API <span class=sub>444</span></h4><table><tr><td class=num>400</td><td>Account state<div><code>/v1/chains/{n}/safes/0x…</code></div></td></tr><tr><td class=num>30</td><td>Targeted messaging<div><code>/v1/targeted-messaging/outreaches/{n}/chains/{n}/safes/0x…</code></div></td></tr><tr><td class=num>7</td><td>Tx preview &amp; simulation<div><code>/v1/chains/{n}/transactions/0x…/preview</code></div></td></tr><tr><td class=num>5</td><td>Tx security scan<div><code>/v1/chains/{n}/security/0x…/threat-analysis</code></div></td></tr><tr><td class=num>2</td><td>Tx proposal &amp; signatures<div><code>/v1/chains/{n}/transactions/0x…/propose</code></div></td></tr></table></div><div><h4><i class="sw t2"></i>Safe RPC <span class=sub>109</span></h4><table><tr><td class=num>73</td><td>RPC: account &amp; contract reads<div><code>eth_getCode</code></div></td></tr><tr><td class=num>24</td><td>RPC: name resolution (ENS)<div><code>eth_call</code></div></td></tr><tr><td class=num>12</td><td>RPC: sanctions screening<div><code>eth_call</code></div></td></tr></table></div><div><h4><i class="sw t1"></i>Safe web app <span class=sub>103</span></h4><table><tr><td class=num>97</td><td>App code &amp; assets<div><code>/swap</code></div></td></tr><tr><td class=num>6</td><td>Security screening (Zodiac)<div><code>/public/api/security-check</code></div></td></tr></table></div><div><h4><i class="sw t0"></i>Third parties <span class=sub>190</span></h4><table><tr><td class=num>112</td><td>Google Analytics · Analytics<div><code>www.google-analytics.com/g/collect</code></div></td></tr><tr><td class=num>24</td><td>CoW Protocol · Swap: order history (12 chains x 2 envs)<div><code>api.cow.fi/sepolia/api/v1/account/0x…/orders</code></div></td></tr><tr><td class=num>20</td><td>CoW Protocol · RPC: account &amp; contract reads<div><code>eth_call</code></div></td></tr><tr><td class=num>15</td><td>CoW Protocol · Swap: order submit &amp; tracking<div><code>api.cow.fi/sepolia/api/v1/orders/0x…</code></div></td></tr><tr><td class=num>9</td><td>Sentry · Error reporting<div><code>o135525.ingest.sentry.io/api/{n}/envelope/</code></div></td></tr><tr><td class=num>4</td><td>CoW Protocol · Swap: balance watcher<div><code>balances-watcher.cow.fi/{n}/sessions/0x…</code></div></td></tr><tr><td class=num>3</td><td>CoW Protocol · Swap: quote<div><code>api.cow.fi/sepolia/api/v1/quote</code></div></td></tr><tr><td class=num>2</td><td>CoW Protocol · Swap: notifications<div><code>cms.cow.fi/api/notification-list/0x…</code></div></td></tr></table></div><div><h4><i class="sw t0"></i>Custom RPC <span class=sub>14</span></h4><table><tr><td class=num>13</td><td>RPC: account &amp; contract reads<div><code>eth_getCode</code></div></td></tr><tr><td class=num>1</td><td>RPC: name resolution (ENS)<div><code>eth_gasPrice, eth_maxPriorityFeePerGas</code></div></td></tr></table></div></div></details>
+  <div class="bdp" id="bd-backend" hidden><h4>Safe backend API: 444 address-linked requests</h4><table><tr><td class=num>400</td><td>Account state<div><code>/v1/chains/{n}/safes/0x…</code></div></td></tr><tr><td class=num>30</td><td>Targeted messaging<div><code>/v1/targeted-messaging/outreaches/{n}/chains/{n}/safes/0x…</code></div></td></tr><tr><td class=num>7</td><td>Tx preview &amp; simulation<div><code>/v1/chains/{n}/transactions/0x…/preview</code></div></td></tr><tr><td class=num>5</td><td>Tx security scan<div><code>/v1/chains/{n}/security/0x…/threat-analysis</code></div></td></tr><tr><td class=num>2</td><td>Tx proposal &amp; signatures<div><code>/v1/chains/{n}/transactions/0x…/propose</code></div></td></tr></table></div><div class="bdp" id="bd-rpc" hidden><h4>Safe RPC: 109 address-linked requests</h4><table><tr><td class=num>73</td><td>RPC: account &amp; contract reads<div><code>eth_getCode</code></div></td></tr><tr><td class=num>24</td><td>RPC: name resolution (ENS)<div><code>eth_call</code></div></td></tr><tr><td class=num>12</td><td>RPC: sanctions screening<div><code>eth_call</code></div></td></tr></table></div><div class="bdp" id="bd-web" hidden><h4>Safe web app: 103 address-linked requests</h4><table><tr><td class=num>97</td><td>App code &amp; assets<div><code>/swap</code></div></td></tr><tr><td class=num>6</td><td>Security screening (Zodiac)<div><code>/public/api/security-check</code></div></td></tr></table></div><div class="bdp" id="bd-third" hidden><h4>Third parties: 190 address-linked requests</h4><table><tr><td class=num>112</td><td>Google Analytics · Analytics<div><code>www.google-analytics.com/g/collect</code></div></td></tr><tr><td class=num>24</td><td>CoW Protocol · Swap: order history (12 chains x 2 envs)<div><code>api.cow.fi/sepolia/api/v1/account/0x…/orders</code></div></td></tr><tr><td class=num>20</td><td>CoW Protocol · RPC: account &amp; contract reads<div><code>eth_call</code></div></td></tr><tr><td class=num>15</td><td>CoW Protocol · Swap: order submit &amp; tracking<div><code>api.cow.fi/sepolia/api/v1/orders/0x…</code></div></td></tr><tr><td class=num>9</td><td>Sentry · Error reporting<div><code>o135525.ingest.sentry.io/api/{n}/envelope/</code></div></td></tr><tr><td class=num>4</td><td>CoW Protocol · Swap: balance watcher<div><code>balances-watcher.cow.fi/{n}/sessions/0x…</code></div></td></tr><tr><td class=num>3</td><td>CoW Protocol · Swap: quote<div><code>api.cow.fi/sepolia/api/v1/quote</code></div></td></tr><tr><td class=num>2</td><td>CoW Protocol · Swap: notifications<div><code>cms.cow.fi/api/notification-list/0x…</code></div></td></tr></table></div><div class="bdp" id="bd-custom" hidden><h4>Custom RPC: 14 address-linked requests</h4><table><tr><td class=num>13</td><td>RPC: account &amp; contract reads<div><code>eth_getCode</code></div></td></tr><tr><td class=num>1</td><td>RPC: name resolution (ENS)<div><code>eth_gasPrice, eth_maxPriorityFeePerGas</code></div></td></tr></table></div>
 </section>
 
 <section id="routing">
@@ -339,6 +346,21 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
     links.forEach(function (a, i) { a.classList.toggle("current", i === cur); if (i === cur) a.setAttribute("aria-current", "true"); else a.removeAttribute("aria-current"); });
   }
   addEventListener("scroll", update, { passive: true }); addEventListener("resize", update); update();
+})();
+
+(function () {
+  var segs = Array.prototype.slice.call(document.querySelectorAll(".split .seg"));
+  segs.forEach(function (b) {
+    b.addEventListener("click", function () {
+      var open = b.getAttribute("aria-expanded") !== "true";
+      segs.forEach(function (o) {
+        var on = open && o === b;
+        o.setAttribute("aria-expanded", on ? "true" : "false");
+        var p = document.getElementById("bd-" + o.getAttribute("data-b"));
+        if (p) p.hidden = !on;
+      });
+    });
+  });
 })();
 </script>
 </body>

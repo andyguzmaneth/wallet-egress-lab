@@ -257,19 +257,17 @@ def shape(r) -> str:
 
 
 def breakdown(sens) -> str:
-    out = ['<div class="bd">']
-    tier_of = {"Safe backend API": 3, "Safe RPC": 2, "Safe web app": 1, "Third parties": 0, "Custom RPC": 0}
-    for b in ["Safe backend API", "Safe RPC", "Safe web app", "Third parties", "Custom RPC"]:
+    ids = {"Safe backend API": "backend", "Safe RPC": "rpc", "Safe web app": "web", "Third parties": "third", "Custom RPC": "custom"}
+    out = []
+    for b, key in ids.items():
         rs = [r for r in sens if bucket(r) == b]
-        if not rs:
-            continue
         rows = []
         for (o, c), n in Counter((r["operator"], r["category"]) for r in rs).most_common(8):
             ex = Counter(shape(r) for r in rs if r["category"] == c and r["operator"] == o).most_common(1)[0][0]
             who = f"{esc(o)} · " if b == "Third parties" else ""
             rows.append(f"<tr><td class=num>{n}</td><td>{who}{esc(c)}<div><code>{esc(ex)}</code></div></td></tr>")
-        out.append(f'<div><h4><i class="sw t{tier_of[b]}"></i>{esc(b)} <span class=sub>{len(rs)}</span></h4><table>{"".join(rows)}</table></div>')
-    out.append("</div>")
+        out.append(f'<div class="bdp" id="bd-{key}" hidden><h4>{esc(b)}: {len(rs)} address-linked requests</h4>'
+                   f'<table>{"".join(rows) or "<tr><td>None</td></tr>"}</table></div>')
     return "".join(out)
 
 

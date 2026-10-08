@@ -118,11 +118,17 @@ h3 { font-size: 15px; margin: 22px 0 6px; }
 a { color: var(--accent, #2a78d6); }
 .kicker a.back { text-decoration: none; font-weight: 600; }
 .kicker a.back::before { content: "\2190  "; }
-details.drill { margin-top: 14px; }
-details.drill > summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--text-secondary); }
-.bd { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px 22px; margin-top: 12px; }
-.bd h4 { margin: 0 0 4px; font-size: 13.5px; display: flex; align-items: center; gap: 6px; }
-.bd table { font-size: 12.5px; } .bd td { padding: 4px 6px 4px 0; vertical-align: top; } .bd code { font-size: 11.5px; word-break: break-all; }\n.routing td { vertical-align: top; } .routing td:first-child { min-width: 220px; width: 38%; } .routing td:nth-child(4) { min-width: 200px; }
+.split .seg { font: inherit; font-size: 13px; text-align: left; border: 0; cursor: pointer; display: block; position: relative; }
+.split .seg .sub { display: block; }
+.split .seg:hover { filter: brightness(1.08); }
+.split .seg:focus-visible { outline: 2px solid var(--text-primary); outline-offset: -2px; }
+.split .seg[aria-expanded="true"] { box-shadow: inset 0 -4px 0 var(--text-primary); }
+.hint { margin: 4px 0 0; }
+.bdp { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; max-width: 760px; }
+.bdp[hidden] { display: none; }
+.bdp h4 { margin: 0 0 4px; font-size: 13.5px; display: flex; align-items: center; gap: 6px; }
+.bdp table { font-size: 13px; width: 100%; } .bdp td { padding: 4px 6px 4px 0; vertical-align: top; } .bdp code { font-size: 11.5px; word-break: break-all; }
+.routing td { vertical-align: top; } .routing td:first-child { min-width: 220px; width: 38%; } .routing td:nth-child(4) { min-width: 200px; }
 code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .tip { position: fixed; pointer-events: none; background: var(--text-primary); color: var(--surface-1); font-size: 12px; padding: 6px 8px; border-radius: 6px; max-width: 420px; z-index: 9; display: none; }
 .theme { position: absolute; top: 16px; right: 16px; font: inherit; font-size: 12px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
@@ -196,14 +202,15 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 <section id="where">
   <h2>Where address-linked requests go</h2>
   <p>Hiding the IP address on the RPC path covers only the RPC share. The rest goes to the Safe backend and to third parties, which see the same IP address and the same Safe address.</p>
-  <div class="split">
-    <div class="seg t3" style="flex:{{FB}}"><b>Safe backend API</b> {{BACKEND}}<div class="sub">{{NBACKEND}} requests</div></div>
-    <div class="seg t2" style="flex:{{FR}}"><b>Safe RPC</b> {{RPC}}<div class="sub">{{NRPC}}</div></div>
-    <div class="seg t1 ink-dark" style="flex:{{FS}}"><b>Safe web app</b> {{SAFEOTHER}}<div class="sub">{{NSAFEOTHER}}</div></div>
-    <div class="seg t0 ink-dark" style="flex:{{FT}}"><b>Third parties</b> {{THIRD}}<div class="sub">{{NTHIRD}}</div></div>
-    <div class="seg t0 ink-dark" style="flex:{{FC}}; opacity:.6"><b>Custom RPC</b> {{CUSTOMPCT}}<div class="sub">{{NCUSTOM}}</div></div>
+  <p class="sub hint">Numbers are address-linked requests in the session. Select a segment to see what it contains.</p>
+  <div class="split" role="group" aria-label="Receivers">
+    <button type="button" class="seg t3" style="flex:{{FB}}" data-b="backend" aria-expanded="false" aria-controls="bd-backend"><b>Safe backend API</b> {{BACKEND}}<span class="sub">{{NBACKEND}}</span></button>
+    <button type="button" class="seg t2" style="flex:{{FR}}" data-b="rpc" aria-expanded="false" aria-controls="bd-rpc"><b>Safe RPC</b> {{RPC}}<span class="sub">{{NRPC}}</span></button>
+    <button type="button" class="seg t1 ink-dark" style="flex:{{FS}}" data-b="web" aria-expanded="false" aria-controls="bd-web"><b>Safe web app</b> {{SAFEOTHER}}<span class="sub">{{NSAFEOTHER}}</span></button>
+    <button type="button" class="seg t0 ink-dark" style="flex:{{FT}}" data-b="third" aria-expanded="false" aria-controls="bd-third"><b>Third parties</b> {{THIRD}}<span class="sub">{{NTHIRD}}</span></button>
+    <button type="button" class="seg t0 ink-dark" style="flex:{{FC}}; opacity:.6" data-b="custom" aria-expanded="false" aria-controls="bd-custom"><b>Custom RPC</b> {{CUSTOMPCT}}<span class="sub">{{NCUSTOM}}</span></button>
   </div>
-  <details class="drill"><summary>What these requests are</summary>{{BREAKDOWN}}</details>
+  {{BREAKDOWN}}
 </section>
 
 <section id="routing">
@@ -333,6 +340,21 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
     links.forEach(function (a, i) { a.classList.toggle("current", i === cur); if (i === cur) a.setAttribute("aria-current", "true"); else a.removeAttribute("aria-current"); });
   }
   addEventListener("scroll", update, { passive: true }); addEventListener("resize", update); update();
+})();
+
+(function () {
+  var segs = Array.prototype.slice.call(document.querySelectorAll(".split .seg"));
+  segs.forEach(function (b) {
+    b.addEventListener("click", function () {
+      var open = b.getAttribute("aria-expanded") !== "true";
+      segs.forEach(function (o) {
+        var on = open && o === b;
+        o.setAttribute("aria-expanded", on ? "true" : "false");
+        var p = document.getElementById("bd-" + o.getAttribute("data-b"));
+        if (p) p.hidden = !on;
+      });
+    });
+  });
 })();
 </script>
 </body>
