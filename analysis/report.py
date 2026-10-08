@@ -226,6 +226,33 @@ def svg_latency(proj) -> str:
     return "".join(out)
 
 
+def svg_units(reqs) -> str:
+    """One square per request, grouped by receiver, colored by tier."""
+    groups = ["Safe backend API", "Safe RPC", "Safe web app", "Third parties", "Custom RPC"]
+    rows, cell, sq, gap, top = 14, 6.2, 5.2, 16, 36
+    out, x0, lbl_right = [], 0.0, 0.0
+    body = []
+    for g in groups:
+        rs = sorted((r for r in reqs if bucket(r) == g), key=lambda r: -r["tier"])
+        if not rs:
+            continue
+        cols = -(-len(rs) // rows)
+        for i, r in enumerate(rs):
+            c, rr = divmod(i, rows)
+            body.append(f'<rect x="{x0 + c * cell:.1f}" y="{top + rr * cell:.1f}" width="{sq}" height="{sq}" rx="1" class="t{r["tier"]}"/>')
+        linked = sum(1 for r in rs if r["tier"] >= 2)
+        tip = f"{g}: {num(len(rs))} requests, {num(linked)} address-linked"
+        body.append(f'<rect x="{x0 - 1:.1f}" y="{top - 1}" width="{cols * cell + 2:.1f}" height="{rows * cell + 2:.1f}" fill="transparent" data-tip="{esc(tip)}"/>')
+        body.append(f'<text x="{x0:.1f}" y="12" class="ulbl">{esc(g)}</text><text x="{x0:.1f}" y="27" class="axis">{num(len(rs))}</text>')
+        lbl_right = max(lbl_right, x0 + len(g) * 8.6 + 6)
+        x0 += cols * cell + gap
+    W = max(x0 - gap, lbl_right)
+    out.append(f'<svg viewBox="-2 0 {W + 4:.0f} {top + rows * cell + 4:.0f}" class="units" role="img" aria-label="Every request as one square, grouped by receiver and colored by tier">')
+    out += body
+    out.append("</svg>")
+    return "".join(out)
+
+
 def legend() -> str:
     return '<div class="legend">' + "".join(
         f'<span><i class="sw t{t}"></i>{esc(n)}</span>' for t, n in enumerate(TIER_NAMES)) + "</div>"
@@ -488,7 +515,7 @@ def main():
         "FB": str(to_backend), "FR": str(to_rpc), "FS": str(to_safe_other), "FT": str(to_third), "FC": str(max(to_custom, 0)),
         "THIRDADDR": esc(", ".join(third_addr) or "none"), "NTHIRDADDR": str(len(third_addr)),
         "IDLERPM": f"{idle_rpm:.0f}", "GA": str(len(ga)), "GAADDR": str(len(ga_addr)),
-        "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a), "LATSVG": svg_latency(proj), "LEGEND": legend(),
+        "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a), "LATSVG": svg_latency(proj), "UNITS": svg_units(reqs), "LEGEND": legend(),
         "ROUTING": routing(reqs), "BREAKDOWN": breakdown(sens), "RAILMAINNET": '<li><a href="#mainnet" data-rail="mainnet"><span class="tick"></span><span class="label">Mainnet pass</span></a></li>' if m else "", "BACK": esc(args.back),
         "DATE": time.strftime("%Y-%m-%d", time.gmtime(a["t0"])), "NSTEPS": str(len(a["windows"])), "INV": "".join(inv_rows), "MATRIX": "".join(mat_rows), "PROJ": proj_rows,
         "CUSTOM": esc(custom_note), "MAINNET": mainnet_html, "FAILS": fail_note,

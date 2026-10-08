@@ -121,7 +121,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .recs .chips-row { grid-column: 2; display: flex; gap: 4px; flex-wrap: wrap; }
 .recs .tag { font-size: 11.5px; } .recs .tag.free { color: var(--text-primary); border-color: var(--text-muted); }
 .mini { max-width: 680px; }
-section .tiles { margin-top: 12px; }
+section .tiles { margin-top: 18px; }
+.tiles.two { grid-template-columns: 1fr 1fr; }
+.unitcap { margin: 4px 0 2px; color: var(--text-secondary); }
+.unitwrap svg { max-width: 100%; height: auto; } svg .ulbl { fill: var(--text-primary); font-size: 12px; font-weight: 600; }
 .eyebrow { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 4px; }
 h3 { font-size: 17px; margin: 24px 0 6px; }
 a { color: var(--accent, #2a78d6); }
@@ -182,10 +185,11 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 
 <section id="summary">
   <h2>Summary</h2>
-  <div class="tiles">
-    <div class="tile"><div class="v">{{N}}</div><div class="l">requests in {{DUR}} min, plus {{NPRE}} CORS preflights. {{IDLERPM}} per minute while idle on the home page.</div></div>
-    <div class="tile"><div class="v">{{SENS}}</div><div class="l">requests ({{SENSPCT}}) carry an address or reveal a pending action.</div></div>
-    <div class="tile"><div class="v">{{BACKEND}}</div><div class="l">of those go to the Safe backend API. {{RPC}} go to Safe's RPC.</div></div>
+  <p class="unitcap">Every one of the {{N}} requests in a {{DUR}}-minute session, one square each, by receiver:</p>
+  {{LEGEND}}
+  <div class="unitwrap">{{UNITS}}</div>
+  <div class="tiles two">
+    <div class="tile"><div class="v">{{SENS}}</div><div class="l">requests ({{SENSPCT}}) carry an address or reveal a pending action. {{BACKEND}} of them go to the Safe backend API, {{RPC}} to Safe's RPC.</div></div>
     <div class="tile"><div class="v">{{NTHIRDADDR}}</div><div class="l">third parties receive an address: {{THIRDADDR}}.</div></div>
   </div>
   <h3>Key findings</h3>
