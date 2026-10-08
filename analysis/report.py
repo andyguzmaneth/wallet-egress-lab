@@ -114,7 +114,7 @@ def svg_timeline(a) -> str:
     tmax = max(r["t"] for r in reqs) - t0
     lanes = [o for o in OPERATOR_ORDER if any(op_bucket(r["operator"]) == o for r in reqs)] + ["Other"]
     W, left, lane_h, top = 1000, 150, 22, 58
-    H = top + lane_h * len(lanes) + 26
+    H = top + lane_h * len(lanes) + 80
     x = lambda t: left + (W - left - 10) * (t / tmax)
     out = [f'<svg viewBox="0 0 {W} {H}" class="timeline" role="img" aria-label="Every request over the journey, by operator and tier">']
     for i, w in enumerate(a["windows"]):
@@ -140,6 +140,36 @@ def svg_timeline(a) -> str:
         y = top + li * lane_h + lane_h / 2
         tip = f'{STEP_LABELS.get(r["step"], r["step"])} · {r["host"]}{r["path"]} · {TIER_NAMES[r["tier"]]} · {r["ms"]:.0f} ms'
         out.append(f'<rect x="{x(r["t"] - t0):.1f}" y="{y - 7:.1f}" width="2" height="14" rx="1" class="t{r["tier"]}" data-tip="{esc(tip)}"/>')
+    # Annotations: a few notes that carry the story, under the lanes.
+    base = top + lane_h * len(lanes) + 2
+    win = {w["name"]: w for w in a["windows"]}
+    notes = []
+    def at(step, text):
+        if step in win:
+            w = win[step]
+            notes.append((x((w["t0"] + w["t1"]) / 2 - t0), text))
+    n_create = sum(1 for r in reqs if r["step"] == "create_safe")
+    at("create_safe", f"Create Safe: {num(n_create)} requests")
+    n_cow = sum(1 for r in reqs if r["step"] == "swap_quote" and r["operator"] == "CoW Protocol")
+    at("swap_quote", f"Swap opens: {num(n_cow)} CoW requests")
+    g = idle_gap(reqs, win.get("idle_home"))
+    if g:
+        at("idle_home", f"Idle: Safe address every {g:.0f} s")
+    n_saferpc = sum(1 for r in reqs if r["step"].startswith("custom_rpc") and r["host"] == "rpc.safe.global")
+    if n_saferpc:
+        at("custom_rpc_set", f"Custom RPC set: Safe RPC still called {n_saferpc}×")
+    right = [-999.0, -999.0, -999.0]   # right edge of the last note in each row
+    for nx, text in sorted(notes):
+        wtxt = len(text) * 6.8
+        anchor = "end" if nx + wtxt > W - 6 else "start"
+        l, r_ = (nx - wtxt - 4, nx) if anchor == "end" else (nx, nx + wtxt + 4)
+        row = next((i for i, e in enumerate(right) if l > e + 8), len(right) - 1)
+        right[row] = r_
+        ty = base + 18 + row * 16
+        tx = nx + (-4 if anchor == "end" else 4)
+        out.append(f'<line x1="{nx:.1f}" x2="{nx:.1f}" y1="{base - 6}" y2="{ty - 3}" class="annline"/>')
+        out.append(f'<circle cx="{nx:.1f}" cy="{base - 6}" r="2.5" class="anndot"/>')
+        out.append(f'<text x="{tx:.1f}" y="{ty}" class="ann" text-anchor="{anchor}">{esc(text)}</text>')
     for m in range(0, int(tmax / 60) + 1, 5):
         out.append(f'<text x="{x(m * 60):.1f}" y="{H - 6}" class="axis" text-anchor="middle">{m} min</text>')
     out.append("</svg>")
@@ -443,7 +473,7 @@ def main():
         "TIERHELP": "".join(
             f'<li><span><i class="sw t{t}"></i><b>{esc(TIER_NAMES[t])}.</b> {esc(TIER_HELP[t])}</span>'
             f'<span class="n">{num(tc[t])} requests</span></li>' for t in range(4)),
-        "STEPKEY": "".join(f'<li>{esc(STEP_LABELS.get(w["name"], w["name"]))}</li>' for w in a["windows"]),
+        "STEPKEY": "".join(f'<li><b>{i + 1}</b> {esc(STEP_LABELS.get(w["name"], w["name"]))}</li>' for i, w in enumerate(a["windows"])),
     } | titles).items():
         page = page.replace("{{" + k + "}}", v)
     out = Path(args.out) if args.out else Path(args.site) / "runs" / a["run"] / "index.html"

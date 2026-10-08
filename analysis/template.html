@@ -92,7 +92,9 @@ svg rect[data-tip]:hover { stroke: var(--text-primary); stroke-width: 1; }
 #method-rest > p { color: var(--text-secondary); max-width: 820px; }
 #method .tierhelp { margin-bottom: 4px; }
 .tierhelp b { color: var(--text-primary); font-weight: 600; }
-.stepkey { columns: 3; font-size: 12px; color: var(--text-muted); margin: 8px 0 0; padding-left: 20px; }
+.stepkey { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 12px; color: var(--text-muted); }
+.stepkey b { color: var(--text-secondary); font-weight: 600; margin-right: 2px; }
+svg .ann { fill: var(--text-primary); font-size: 12px; font-weight: 600; } svg .annline { stroke: var(--text-primary); stroke-width: 1; } svg .anndot { fill: var(--text-primary); }
 .scroll { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; }
 th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
@@ -138,7 +140,6 @@ code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
 footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
 @media (max-width: 760px) {
   .tiles { grid-template-columns: 1fr 1fr; }
-  .stepkey { columns: 1; }
   h1 { font-size: 24px; }
   .kicker { padding-right: 72px; }
   .split { flex-direction: column; }
@@ -237,7 +238,7 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
   <h2>{{SESSION_T}}</h2>
   {{LEGEND}}
   <div class="scroll">{{TIMELINE}}</div>
-  <ol class="stepkey">{{STEPKEY}}</ol>
+  <ul class="stepkey">{{STEPKEY}}</ul>
 </section>
 
 <section id="actions">
