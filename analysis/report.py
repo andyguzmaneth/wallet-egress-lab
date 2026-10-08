@@ -71,6 +71,10 @@ def esc(s) -> str:
     return html.escape(str(s), quote=True)
 
 
+def num(n) -> str:
+    return f"{n:,}"
+
+
 def pct(a, b) -> str:
     return f"{(100 * a / b):.0f}%" if b else "0%"
 
@@ -163,7 +167,7 @@ def svg_steps(a) -> str:
             w = (W - left - 70) * n / mx
             out.append(f'<rect x="{xx:.1f}" y="{y}" width="{max(w - 2, 1):.1f}" height="{bh}" rx="3" class="t{t}" data-tip="{esc(STEP_LABELS.get(s, s))}: {n} {esc(TIER_NAMES[t].lower())}"/>')
             xx += w
-        out.append(f'<text x="{xx + 6:.1f}" y="{y + bh - 4}" class="axis">{sum(by[s])}</text>')
+        out.append(f'<text x="{xx + 6:.1f}" y="{y + bh - 4}" class="axis">{num(sum(by[s]))}</text>')
     out.append("</svg>")
     return "".join(out)
 
@@ -230,8 +234,8 @@ def routing(reqs) -> str:
         sens = sum(1 for r in rs if r["tier"] >= 2)
         cats = Counter(r["category"] for r in rs).most_common(4)
         rows.append(f'<tr><td><b>{esc(name)}</b><div class="sub">{esc(what)}</div></td>'
-                    f'<td class=num>{len(rs)}<div class=sub>{pct(len(rs), n)}</div></td><td class=num>{sens}</td>'
-                    f'<td class=sub>{esc(", ".join(f"{c} {k}" for c, k in cats))}</td><td>{esc(cost)}</td></tr>')
+                    f'<td class=num>{num(len(rs))}<div class=sub>{pct(len(rs), n)}</div></td><td class=num>{num(sens)}</td>'
+                    f'<td class=sub>{esc(", ".join(f"{c} {num(k)}" for c, k in cats))}</td><td>{esc(cost)}</td></tr>')
     return "".join(rows)
 
 
@@ -367,7 +371,7 @@ def main():
 <section id="mainnet">
 <h2>What the mainnet pass adds</h2>
 <p>A read-only pass on mainnet watched a public Safe (<code>{esc(m['safe'][:10])}…</code>) with an unfunded signer connected:
-{len(mreqs)} requests, {len(msens)} of them address-linked. These operator and service pairs appeared on mainnet and not in the Sepolia journey:</p>
+{num(len(mreqs))} requests, {num(len(msens))} of them address-linked. These operator and service pairs appeared on mainnet and not in the Sepolia journey:</p>
 <div class="scroll"><table class="mini"><thead><tr><th>Operator</th><th>Service</th><th class=num>Requests</th></tr></thead><tbody>{rows or '<tr><td colspan=3>None</td></tr>'}</tbody></table></div>
 </section>"""
 
@@ -377,7 +381,7 @@ def main():
         inv_rows.append(
             f'<tr data-tier="{r["tier"]}"{" class=extra" if len(inv_rows) >= 14 else ""}><td>{esc(r["operator"])}</td>'
             f'<td>{esc(r["category"])}<div class="sub">{esc(", ".join(r["hosts"][:2]) + (f" +{len(r['hosts']) - 2}" if len(r["hosts"]) > 2 else ""))}{(" · " + esc(meth)) if meth else ""}</div></td>'
-            f'<td class=num data-v="{r["n"]}">{r["n"]}{f"<div class=sub>+{r["preflight"]} preflight</div>" if r["preflight"] else ""}</td>'
+            f'<td class=num data-v="{r["n"]}">{num(r["n"])}{f"<div class=sub>+{r["preflight"]} preflight</div>" if r["preflight"] else ""}</td>'
             f'<td data-v="{r["tier"] * 100000 + r["mix"][r["tier"]]}">{mixbar(r["mix"])}</td>'
             f'<td>{"".join(f"<span class=tag>{esc(ID_SHORT[i])}</span>" for i in r["ids"]) or "<span class=sub>none</span>"}</td>'
             + (f'<td class=num data-v="{r["p50"]}">{r["p50"]:.0f}<div class=sub>p95 {r["p95"]:.0f}</div></td>' if r["p50"] else '<td class=num data-v="0"><span class=sub>stream</span></td>') +
@@ -390,8 +394,8 @@ def main():
         for i in ID_COLS:
             v = c[i]
             lvl = 0 if not v else 1 + min(4, int(5 * v / (mat_max + 1)))
-            cells.append(f'<td class="num heat h{lvl}">{v or "·"}</td>')
-        mat_rows.append(f'<tr><th scope=row>{esc(o)}</th><td class=num>{c["_total"]}</td>{"".join(cells)}<td class="num heat h{0 if not c["_intent"] else 1 + min(4, int(5 * c["_intent"] / (mat_max + 1)))}">{c["_intent"] or "·"}</td></tr>')
+            cells.append(f'<td class="num heat h{lvl}">{num(v) if v else "·"}</td>')
+        mat_rows.append(f'<tr><th scope=row>{esc(o)}</th><td class=num>{num(c["_total"])}</td>{"".join(cells)}<td class="num heat h{0 if not c["_intent"] else 1 + min(4, int(5 * c["_intent"] / (mat_max + 1)))}">{c["_intent"] or "·"}</td></tr>')
 
     proj_rows = "".join(
         f'<tr><td>{esc(STEP_LABELS.get(x["step"], x["step"]))}</td><td class=num>{x["n"]}</td>'
@@ -403,12 +407,12 @@ def main():
     findings, recs = narrative(a, reqs, sens, idle_win, ga, ga_addr)
     page = TEMPLATE.replace("{{FINDINGS}}", findings).replace("{{RECS}}", recs)
     for k, v in {
-        "RUN": esc(a["run"]), "DUR": f"{dur_min:.0f}", "N": str(len(reqs)), "NPRE": str(len(pre)),
+        "RUN": esc(a["run"]), "DUR": f"{dur_min:.0f}", "N": num(len(reqs)), "NPRE": num(len(pre)),
         "OPS": str(len(third_ops)), "OPLIST": esc(", ".join(third_ops)),
-        "SENS": str(len(sens)), "SENSPCT": pct(len(sens), len(reqs)),
+        "SENS": num(len(sens)), "SENSPCT": pct(len(sens), len(reqs)),
         "BACKEND": pct(to_backend, len(sens)), "RPC": pct(to_rpc, len(sens)), "SAFEOTHER": pct(to_safe_other, len(sens)),
-        "THIRD": pct(to_third, len(sens)), "NBACKEND": str(to_backend), "NRPC": str(to_rpc),
-        "NSAFEOTHER": str(to_safe_other), "NTHIRD": str(to_third), "CUSTOMPCT": pct(to_custom, len(sens)), "NCUSTOM": str(to_custom),
+        "THIRD": pct(to_third, len(sens)), "NBACKEND": num(to_backend), "NRPC": num(to_rpc),
+        "NSAFEOTHER": num(to_safe_other), "NTHIRD": num(to_third), "CUSTOMPCT": pct(to_custom, len(sens)), "NCUSTOM": num(to_custom),
         "FB": str(to_backend), "FR": str(to_rpc), "FS": str(to_safe_other), "FT": str(to_third), "FC": str(max(to_custom, 0)),
         "THIRDADDR": esc(", ".join(third_addr) or "none"), "NTHIRDADDR": str(len(third_addr)),
         "IDLERPM": f"{idle_rpm:.0f}", "GA": str(len(ga)), "GAADDR": str(len(ga_addr)),
@@ -420,7 +424,7 @@ def main():
         "TOR": f"{TOR}", "WINDOW": str(WINDOW), "TORJS": f"{TORJS}", "PIR": f"{PIR}", "OHTTP": f"{OHTTP * 1000:.0f}",
         "TIERHELP": "".join(
             f'<li><span><i class="sw t{t}"></i><b>{esc(TIER_NAMES[t])}.</b> {esc(TIER_HELP[t])}</span>'
-            f'<span class="n">{tc[t]} requests</span></li>' for t in range(4)),
+            f'<span class="n">{num(tc[t])} requests</span></li>' for t in range(4)),
         "STEPKEY": "".join(f'<li>{esc(STEP_LABELS.get(w["name"], w["name"]))}</li>' for w in a["windows"]),
     }.items():
         page = page.replace("{{" + k + "}}", v)
@@ -530,7 +534,7 @@ def build_index(site: Path):
     rows = "".join(
         f'<tr><td><a href="runs/{esc(x["run"])}/index.html">{esc(x["date"])}</a><div class=sub>{esc(x["run"])}</div></td>'
         f'<td>{esc(x["wallet"])}<div class=sub>{esc(x["plan"])}</div></td><td class=num>{x["minutes"]} min</td>'
-        f'<td class=num>{x["requests"]}</td><td class=num>{x["linked"]}<div class=sub>{esc(x["linked_pct"])}</div></td>'
+        f'<td class=num>{num(x["requests"])}</td><td class=num>{num(x["linked"])}<div class=sub>{esc(x["linked_pct"])}</div></td>'
         f'<td class=num>{esc(x["backend_pct"])}</td><td class=num>{esc(x["rpc_pct"])}</td>'
         f'<td class=num>{x["steps_ok"]}/{x["steps"]}</td></tr>' for x in metas)
     latest = f'runs/{esc(metas[0]["run"])}/index.html' if metas else "#"

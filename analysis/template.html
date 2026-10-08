@@ -196,13 +196,13 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 <section id="where">
   <h2>Where address-linked requests go</h2>
   <p>Hiding the IP address on the RPC path covers only the RPC share. The rest goes to the Safe backend and to third parties, which see the same IP address and the same Safe address.</p>
-  <p class="sub hint">Numbers are address-linked requests in the session. Select a segment to see what it contains.</p>
+  <p class="sub hint">Counts are address-linked requests. Select a segment to see what it contains.</p>
   <div class="split" role="group" aria-label="Receivers">
-    <button type="button" class="seg t3" style="flex:{{FB}}" data-b="backend" aria-expanded="false" aria-controls="bd-backend"><b>Safe backend API</b> {{BACKEND}}<span class="sub">{{NBACKEND}}</span></button>
-    <button type="button" class="seg t2" style="flex:{{FR}}" data-b="rpc" aria-expanded="false" aria-controls="bd-rpc"><b>Safe RPC</b> {{RPC}}<span class="sub">{{NRPC}}</span></button>
-    <button type="button" class="seg t1 ink-dark" style="flex:{{FS}}" data-b="web" aria-expanded="false" aria-controls="bd-web"><b>Safe web app</b> {{SAFEOTHER}}<span class="sub">{{NSAFEOTHER}}</span></button>
-    <button type="button" class="seg t0 ink-dark" style="flex:{{FT}}" data-b="third" aria-expanded="false" aria-controls="bd-third"><b>Third parties</b> {{THIRD}}<span class="sub">{{NTHIRD}}</span></button>
-    <button type="button" class="seg t0 ink-dark" style="flex:{{FC}}; opacity:.6" data-b="custom" aria-expanded="false" aria-controls="bd-custom"><b>Custom RPC</b> {{CUSTOMPCT}}<span class="sub">{{NCUSTOM}}</span></button>
+    <button type="button" class="seg t3" style="flex:{{FB}}" data-b="backend" aria-expanded="false" aria-controls="bd-backend"><b>Safe backend API</b> {{BACKEND}}<span class="sub">{{NBACKEND}} requests</span></button>
+    <button type="button" class="seg t2" style="flex:{{FR}}" data-b="rpc" aria-expanded="false" aria-controls="bd-rpc"><b>Safe RPC</b> {{RPC}}<span class="sub">{{NRPC}} requests</span></button>
+    <button type="button" class="seg t1 ink-dark" style="flex:{{FS}}" data-b="web" aria-expanded="false" aria-controls="bd-web"><b>Safe web app</b> {{SAFEOTHER}}<span class="sub">{{NSAFEOTHER}} requests</span></button>
+    <button type="button" class="seg t0 ink-dark" style="flex:{{FT}}" data-b="third" aria-expanded="false" aria-controls="bd-third"><b>Third parties</b> {{THIRD}}<span class="sub">{{NTHIRD}} requests</span></button>
+    <button type="button" class="seg t0 ink-dark" style="flex:{{FC}}; opacity:.6" data-b="custom" aria-expanded="false" aria-controls="bd-custom"><b>Custom RPC</b> {{CUSTOMPCT}}<span class="sub">{{NCUSTOM}} requests</span></button>
   </div>
   {{BREAKDOWN}}
 </section>
