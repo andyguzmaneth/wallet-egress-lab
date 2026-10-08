@@ -369,7 +369,8 @@ def main():
         rows = "".join(f"<tr><td>{esc(o)}</td><td>{esc(c)}</td><td class=num>{n}</td></tr>" for (o, c), n in new.most_common(12))
         mainnet_html = f"""
 <section id="mainnet">
-<h2>What the mainnet pass adds</h2>
+<div class="eyebrow">Mainnet pass</div>
+<h2>{f"Mainnet adds {len({o for o, _ in new})} hosts the Sepolia run never contacted" if new else "Mainnet adds no new receivers"}</h2>
 <p>A read-only pass on mainnet watched a public Safe (<code>{esc(m['safe'][:10])}…</code>) with an unfunded signer connected:
 {num(len(mreqs))} requests, {num(len(msens))} of them address-linked. These operator and service pairs appeared on mainnet and not in the Sepolia journey:</p>
 <div class="scroll"><table class="mini"><thead><tr><th>Operator</th><th>Service</th><th class=num>Requests</th></tr></thead><tbody>{rows or '<tr><td colspan=3>None</td></tr>'}</tbody></table></div>
@@ -405,8 +406,25 @@ def main():
     fail_note = (" Steps that did not complete: " + ", ".join(esc(STEP_LABELS.get(s["name"], s["name"])) for s in fails) + ".") if fails else ""
 
     findings, recs = narrative(a, reqs, sens, idle_win, ga, ga_addr)
+    lanes_n = Counter(lane(r) for r in reqs)
+    by_step = Counter(r["step"] for r in reqs if r["step"] in {w["name"] for w in a["windows"]})
+    top_step, top_n = by_step.most_common(1)[0]
+    who_top = [o for o, c in sorted(mat, key=lambda oc: -oc[1]["Safe address"])[:2]]
+    gap = idle_gap(reqs, idle_win)
+    lo = min((x["tor_all"] for x in proj), default=0); hi = max((x["tor_all"] for x in proj), default=0)
+    mlo = min((x["mixed"] for x in proj), default=0); mhi = max((x["mixed"] for x in proj), default=0)
+    titles = {
+        "WHERE_T": f"{pct(to_backend, len(sens))} of address-linked requests go to Safe's backend, {pct(to_rpc, len(sens))} to its RPC",
+        "ROUTING_T": f"{pct(lanes_n[0] + lanes_n[1], len(reqs))} can stay plain or be removed; {pct(lanes_n[2], len(reqs))} need the origin hidden, {pct(lanes_n[3], len(reqs))} the content too",
+        "WHO_T": f"{who_top[0].replace('Safe backend', 'The Safe backend')} and {who_top[1]} see the Safe address most often" if len(who_top) == 2 else "Who learns what",
+        "SESSION_T": f"The app keeps sending the Safe address while idle, a burst every {gap:.0f} s" if gap else "The session, request by request",
+        "ACTIONS_T": f"{STEP_LABELS.get(top_step, top_step).split(' (')[0]} sends the most requests: {num(top_n)}",
+        "INV_T": "Every endpoint, sorted by what it reveals",
+        "LAT_T": f"Hiding the origin adds {lo:.0f} to {hi:.0f} s per action over Tor, {mlo:.0f} to {mhi:.0f} s with a relay for the backend",
+        "RECS_T": "Recommendations",
+    }
     page = TEMPLATE.replace("{{FINDINGS}}", findings).replace("{{RECS}}", recs)
-    for k, v in {
+    for k, v in ({
         "RUN": esc(a["run"]), "DUR": f"{dur_min:.0f}", "N": num(len(reqs)), "NPRE": num(len(pre)),
         "OPS": str(len(third_ops)), "OPLIST": esc(", ".join(third_ops)),
         "SENS": num(len(sens)), "SENSPCT": pct(len(sens), len(reqs)),
@@ -426,7 +444,7 @@ def main():
             f'<li><span><i class="sw t{t}"></i><b>{esc(TIER_NAMES[t])}.</b> {esc(TIER_HELP[t])}</span>'
             f'<span class="n">{num(tc[t])} requests</span></li>' for t in range(4)),
         "STEPKEY": "".join(f'<li>{esc(STEP_LABELS.get(w["name"], w["name"]))}</li>' for w in a["windows"]),
-    }.items():
+    } | titles).items():
         page = page.replace("{{" + k + "}}", v)
     out = Path(args.out) if args.out else Path(args.site) / "runs" / a["run"] / "index.html"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -442,6 +460,13 @@ def main():
         }
         (out.parent / "meta.json").write_text(json.dumps(meta, indent=2))
         build_index(Path(args.site))
+
+
+def idle_gap(reqs, idle_win) -> float:
+    idle = sorted(r["t"] for r in reqs if r["step"] == "idle_home" and r["category"] == "Account state")
+    starts = [t for i, t in enumerate(idle) if i == 0 or t - idle[i - 1] > 3]
+    gaps = [b - a2 for a2, b in zip(starts, starts[1:])]
+    return statistics.median(gaps) if idle_win and gaps else 0
 
 
 def narrative(a, reqs, sens, idle_win, ga, ga_addr):
@@ -464,12 +489,10 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
     # 2. Backend polling
     idle = sorted(r["t"] for r in reqs if r["step"] == "idle_home" and r["category"] == "Account state")
     if idle_win and len(idle) > 3:
-        starts = [t for i, t in enumerate(idle) if i == 0 or t - idle[i - 1] > 3]
-        gaps = [b - a2 for a2, b in zip(starts, starts[1:])]
         per_min = len(idle) / ((idle_win["t1"] - idle_win["t0"]) / 60)
         F.append(("The Safe backend links the IP address to the Safe address continuously while the app is open.",
                   f"On an idle home screen the app sent {per_min:.0f} account-state requests per minute (Safe info, balances, queue, history), "
-                  f"about one burst every {statistics.median(gaps) if gaps else 0:.0f} s. Each carries the Safe address in the URL."))
+                  f"about one burst every {idle_gap(reqs, idle_win):.0f} s. Each carries the Safe address in the URL."))
         R.append(("Put an Oblivious HTTP relay, run by a separate operator, in front of the Safe backend API.",
                   f"The relay sees the IP address and not the request; the backend sees the request and not the IP address. "
                   f"Covers the {sum(1 for r in sens if r['host'] in ('safe-client.safe.global', 'api.safe.global'))} backend requests, which are the largest share. "

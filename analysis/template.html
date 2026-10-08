@@ -113,6 +113,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .recs .why { grid-column: 2; color: var(--text-secondary); font-size: 14px; }
 .mini { max-width: 680px; }
 section .tiles { margin-top: 12px; } section .tile { background: var(--surface-0); }
+.eyebrow { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 4px; }
 h3 { font-size: 15px; margin: 22px 0 6px; }
 a { color: var(--accent, #2a78d6); }
 .kicker a.back { text-decoration: none; font-weight: 600; }
@@ -194,8 +195,9 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 </section>
 
 <section id="where">
-  <h2>Where address-linked requests go</h2>
-  <p>Hiding the IP address on the RPC path covers only the RPC share. The rest goes to the Safe backend and to third parties, which see the same IP address and the same Safe address.</p>
+  <div class="eyebrow">Where requests go</div>
+  <h2>{{WHERE_T}}</h2>
+  <p>Hiding the IP address on the RPC path covers only the RPC share.</p>
   <p class="sub hint">Counts are address-linked requests. Select a segment to see what it contains.</p>
   <div class="split" role="group" aria-label="Receivers">
     <button type="button" class="seg t3" style="flex:{{FB}}" data-b="backend" aria-expanded="false" aria-controls="bd-backend"><b>Safe backend API</b> {{BACKEND}}<span class="sub">{{NBACKEND}} requests</span></button>
@@ -208,8 +210,9 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 </section>
 
 <section id="routing">
-  <h2>Routing plan: what can stay plain, what needs anon-RPC, what needs PIR</h2>
-  <p>Each request in the session, sorted by the cheapest treatment that removes the address-to-IP link. The Safe backend carries most address-linked traffic, so an origin-hiding relay in front of the backend API does more than anon-RPC on the RPC path alone.</p>
+  <div class="eyebrow">Routing plan</div>
+  <h2>{{ROUTING_T}}</h2>
+  <p>Each request, sorted by the cheapest treatment that removes the address-to-IP link.</p>
   <div class="scroll"><table class="routing">
     <thead><tr><th>Treatment</th><th class=num>Requests</th><th class=num>Address-linked</th><th>Largest services</th><th>Added latency</th></tr></thead>
     <tbody>{{ROUTING}}</tbody>
@@ -217,8 +220,9 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 </section>
 
 <section id="who">
-  <h2>Who learns what</h2>
-  <p>Requests per operator that carry each identifier. Every request also carries the IP address. A cell is the count of requests in the session; a dot means none.</p>
+  <div class="eyebrow">Who learns what</div>
+  <h2>{{WHO_T}}</h2>
+  <p>Requests per receiver that carry each identifier. Every request also carries the IP address.</p>
   <div class="scroll"><table>
     <thead><tr><th>Receiver</th><th class=num>All requests</th><th class=num>Safe address</th><th class=num>Owner address</th><th class=num>Counterparty</th><th class=num>Tx hash / order id</th><th class=num>Client ID</th><th class=num>Intent</th></tr></thead>
     <tbody>{{MATRIX}}</tbody>
@@ -226,20 +230,23 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 </section>
 
 <section id="session">
-  <h2>The session, request by request</h2>
+  <div class="eyebrow">Session timeline</div>
+  <h2>{{SESSION_T}}</h2>
   {{LEGEND}}
   <div class="scroll">{{TIMELINE}}</div>
   <ol class="stepkey">{{STEPKEY}}</ol>
 </section>
 
 <section id="actions">
-  <h2>Requests per user action</h2>
+  <div class="eyebrow">Per user action</div>
+  <h2>{{ACTIONS_T}}</h2>
   {{LEGEND}}
   <div class="scroll">{{STEPS}}</div>
 </section>
 
 <section id="inventory">
-  <h2>Endpoint inventory</h2>
+  <div class="eyebrow">Endpoint inventory</div>
+  <h2>{{INV_T}}</h2>
   <p>One row per operator and service. Latency is the time from request start to the last response byte, measured at the proxy. Click a header to sort.</p>
   <div class="chips" id="chips">
     <button type="button" aria-pressed="true" data-t="all">All</button>
@@ -256,7 +263,8 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 </section>
 
 <section id="latency">
-  <h2>Latency cost of hiding the origin</h2>
+  <div class="eyebrow">Latency cost</div>
+  <h2>{{LAT_T}}</h2>
   <p>For each user action, the table takes the address-linked requests in the first {{WINDOW}} s after the action, counts each endpoint once (repeated polls of the same endpoint are dropped), and finds the longest chain of them that run one after another. Parallel requests share one added delay; sequential requests add up. The estimate multiplies the chain length by the added latency per request: {{TOR}} s for Tor (p50 measured from an Arti client), {{OHTTP}} ms for one Oblivious HTTP relay hop (assumed). It is an upper bound for interactive steps, because some sequential requests do not depend on each other.</p>
   <div class="scroll"><table class="mini">
     <thead><tr><th>Action</th><th class=num>Distinct address-linked requests</th><th class=num>Sequential chain</th><th class=num>All over Tor</th><th class=num>Backend via OHTTP, RPC via Tor</th></tr></thead>
@@ -267,7 +275,8 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 </section>
 
 <section id="recs">
-  <h2>Recommendations</h2>
+  <div class="eyebrow">Recommendations</div>
+  <h2>{{RECS_T}}</h2>
   {{RECS}}
 </section>
 
