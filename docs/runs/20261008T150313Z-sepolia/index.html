@@ -174,11 +174,16 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 }
 @media (max-width: 1180px) { .rail { display: none; } }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .rail .tick, .rail .label { transition: none; } }
+
+.codebox { position: relative; margin: 12px 0; }
+.codebox pre { margin: 0; padding: 14px 16px; overflow-x: auto; background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; font-size: 12.5px; line-height: 1.6; }
+.codebox .copy { position: absolute; top: 8px; right: 8px; font: inherit; font-size: 12px; border: 1px solid var(--border); background: var(--surface-0); color: var(--text-secondary); border-radius: 6px; padding: 2px 9px; cursor: pointer; }
+.mini.repro { max-width: 900px; } .repro td { padding: 6px 12px 6px 0; } .repro td:first-child { font-weight: 600; white-space: nowrap; }
 </style>
 </head>
 <body>
 <button class="theme" type="button" id="theme">Theme</button>
-<nav class="rail" aria-label="Sections"><ul><li><a href="#summary" data-rail="summary"><span class="tick"></span><span class="label">Summary</span></a></li><li><a href="#method" data-rail="method"><span class="tick"></span><span class="label">How we did it</span></a></li><li><a href="#where" data-rail="where"><span class="tick"></span><span class="label">Where requests go</span></a></li><li><a href="#routing" data-rail="routing"><span class="tick"></span><span class="label">Routing plan</span></a></li><li><a href="#who" data-rail="who"><span class="tick"></span><span class="label">Who learns what</span></a></li><li><a href="#session" data-rail="session"><span class="tick"></span><span class="label">Session timeline</span></a></li><li><a href="#actions" data-rail="actions"><span class="tick"></span><span class="label">Per user action</span></a></li><li><a href="#inventory" data-rail="inventory"><span class="tick"></span><span class="label">Endpoint inventory</span></a></li><li><a href="#latency" data-rail="latency"><span class="tick"></span><span class="label">Latency cost</span></a></li><li><a href="#recs" data-rail="recs"><span class="tick"></span><span class="label">Recommendations</span></a></li><li><a href="#mainnet" data-rail="mainnet"><span class="tick"></span><span class="label">Mainnet pass</span></a></li></ul></nav>
+<nav class="rail" aria-label="Sections"><ul><li><a href="#summary" data-rail="summary"><span class="tick"></span><span class="label">Summary</span></a></li><li><a href="#method" data-rail="method"><span class="tick"></span><span class="label">How we did it</span></a></li><li><a href="#where" data-rail="where"><span class="tick"></span><span class="label">Where requests go</span></a></li><li><a href="#routing" data-rail="routing"><span class="tick"></span><span class="label">Routing plan</span></a></li><li><a href="#who" data-rail="who"><span class="tick"></span><span class="label">Who learns what</span></a></li><li><a href="#session" data-rail="session"><span class="tick"></span><span class="label">Session timeline</span></a></li><li><a href="#actions" data-rail="actions"><span class="tick"></span><span class="label">Per user action</span></a></li><li><a href="#inventory" data-rail="inventory"><span class="tick"></span><span class="label">Endpoint inventory</span></a></li><li><a href="#latency" data-rail="latency"><span class="tick"></span><span class="label">Latency cost</span></a></li><li><a href="#recs" data-rail="recs"><span class="tick"></span><span class="label">Recommendations</span></a></li><li><a href="#mainnet" data-rail="mainnet"><span class="tick"></span><span class="label">Mainnet pass</span></a></li><li><a href="#reproduce" data-rail="reproduce"><span class="tick"></span><span class="label">Reproduce</span></a></li></ul></nav>
 <main>
 <header>
   <div class="kicker"><a class="back" href="../../index.html">All runs</a> · Safe{Wallet} web · Sepolia · 2026-10-08 · run 20261008T150313Z-sepolia</div>
@@ -201,11 +206,11 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 
 <section id="method">
   <h2>How we did it</h2>
-  <p>A script played one user through 17 actions on Sepolia: create a 2-of-2 Safe, receive ETH and WETH, send ETH through the multisig flow, swap WETH for COW in the CoW widget, sit idle, and switch to a custom RPC. A second, read-only pass opened a public Safe on mainnet. A recording proxy captured every request, and each request got a privacy tier<span class="rm-end" hidden>.</span><span class="rm-dots">…</span> <button type="button" class="readmore" aria-expanded="false" aria-controls="method-rest">more</button></p>
+  <p>A script played one user through 17 actions on Sepolia: create a 2-of-2 Safe, receive ETH and WETH, send ETH through the multisig flow, swap WETH for COW in the CoW widget, sit idle, and switch to a custom RPC. A second, read-only pass opened a public Safe on mainnet. A recording proxy captured every request, and each request got a privacy tier<span class="rm-end" hidden>.</span><span class="rm-dots">…</span> <button type="button" class="readmore" id="method-more" aria-expanded="false" aria-controls="method-rest">more</button></p>
   <div id="method-rest" hidden>
     <p>Chromium (Playwright, fresh profile, QUIC off) ran behind mitmproxy with a trusted CA, so every request from the page, its iframes and its service worker was recorded with headers and bodies. The signer was an injected EIP-1193 provider whose keys and RPC stay outside the browser, so the capture holds only traffic that Safe{Wallet} and its embedded widgets make. A blank-page baseline run identified the browser's own traffic, which is excluded. Identifiers were found by searching URLs, headers and bodies for the Safe address, the owners, the counterparty, safeTxHash, CoW order ids and analytics client IDs. Each request gets the highest tier whose rule it matches, from least to most sensitive:</p>
     <ol class="tierhelp"><li><span><i class="sw t0"></i><b>Address-free.</b> No address or client ID; the receiver still sees the IP address, the time and what was fetched.</span><span class="n">1,143 requests</span></li><li><span><i class="sw t1"></i><b>Telemetry &amp; fingerprint.</b> A client or device ID that links visits over time, without an address.</span><span class="n">53 requests</span></li><li><span><i class="sw t2"></i><b>Address-linked read.</b> The Safe address or an owner address, which the receiver links to the IP address.</span><span class="n">798 requests</span></li><li><span><i class="sw t3"></i><b>Intent before chain.</b> What the user is about to do (recipient, amount, calldata, signature) before it is on chain.</span><span class="n">62 requests</span></li></ol>
-    <p><button type="button" class="readmore" data-less aria-controls="method-rest">less</button></p>
+    <p><button type="button" class="readmore" id="method-less" aria-controls="method-rest">less</button></p>
   </div>
 </section>
 
@@ -309,6 +314,28 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 <div class="scroll"><table class="mini"><thead><tr><th>Operator</th><th>Service</th><th class=num>Requests</th></tr></thead><tbody><tr><td>assets.coingecko.com</td><td>App code &amp; assets</td><td class=num>12</td></tr><tr><td>cdn.zerion.io</td><td>App code &amp; assets</td><td class=num>8</td></tr><tr><td>protocol-icons.s3.amazonaws.com</td><td>App code &amp; assets</td><td class=num>5</td></tr><tr><td>eth.blockscout.com</td><td>Config &amp; metadata</td><td class=num>4</td></tr><tr><td>curvefi.github.io</td><td>Config &amp; metadata</td><td class=num>1</td></tr></tbody></table></div>
 </section>
 
+<section id="reproduce">
+  <div class="eyebrow">Reproduce</div>
+  <h2>Run it yourself: one command per step, about 30 minutes</h2>
+  <p>You need Linux with Node 20 or later, Python 3.11 or later, Xvfb, and one Sepolia key with about 0.4 ETH. Source and README: <a href="https://github.com/andyguzmaneth/wallet-egress-lab">github.com/andyguzmaneth/wallet-egress-lab</a>.</p>
+  <div class="codebox"><button type="button" class="copy" data-copy>Copy</button><pre><code>git clone https://github.com/andyguzmaneth/wallet-egress-lab &amp;&amp; cd wallet-egress-lab
+npm install &amp;&amp; npx playwright install chromium
+uv tool install mitmproxy                        # mitmdump on PATH; Xvfb from your distro
+
+npx tsx driver/keys.ts                           # owner keys A, B and outside account R
+FUNDER_KEY=0x... npx tsx driver/keys.ts fund     # sends about 0.4 Sepolia ETH to A, B, R
+
+scripts/run.sh baseline                          # blank browser, about 3 min
+scripts/run.sh sepolia                           # full journey, about 20 min
+MITM_PORT=8083 scripts/run.sh mainnet            # read-only pass, about 7 min
+
+python3 -I analysis/analyze.py runs/&lt;run&gt; --baseline runs/&lt;baseline-run&gt;   # once per run
+python3 -I analysis/report.py --sepolia runs/&lt;sepolia-run&gt; --mainnet runs/&lt;mainnet-run&gt; --site docs</code></pre></div>
+  <h3>Techniques and where they live</h3>
+  <div class="scroll"><table class="mini repro"><tr><td>Capture every request with bodies</td><td class=sub>mitmproxy addon, browser QUIC off</td><td><code>capture/record.py</code></td></tr><tr><td>Keep keys out of the capture</td><td class=sub>injected EIP-1193 signer in Node</td><td><code>driver/signer.ts</code></td></tr><tr><td>Script the user</td><td class=sub>Playwright steps with start and end markers</td><td><code>driver/journey.ts</code></td></tr><tr><td>Remove the browser&#x27;s own traffic</td><td class=sub>blank-page baseline run</td><td><code>scripts/run.sh baseline</code></td></tr><tr><td>Find what each request reveals</td><td class=sub>search URLs, headers, bodies for known identifiers</td><td><code>analysis/analyze.py</code></td></tr><tr><td>Estimate latency cost</td><td class=sub>longest sequential chain x added latency per hop</td><td><code>analysis/report.py</code></td></tr></table></div>
+  <p class="sub">To test another wallet, replace the steps in <code>driver/journey.ts</code>; capture, analysis and report stay the same. Each run adds a folder under <code>docs/runs/</code> and a row in the run index.</p>
+</section>
+
 <footer>Generated by wallet-egress-lab from run 20261008T150313Z-sepolia. <a href="../../index.html">All runs</a></footer>
 </main>
 <div class="tip" id="tip"></div>
@@ -387,7 +414,7 @@ html { scroll-behavior: smooth; scroll-padding-top: 16px; }
 
 (function () {
   var rest = document.getElementById("method-rest"), dots = document.querySelector(".rm-dots");
-  var more = document.querySelector('.readmore:not([data-less])'), less = document.querySelector(".readmore[data-less]");
+  var more = document.getElementById("method-more"), less = document.getElementById("method-less");
   if (!rest || !more) return;
   function set(open) { rest.hidden = !open; more.hidden = open; if (dots) dots.hidden = open; var end = document.querySelector(".rm-end"); if (end) end.hidden = !open; more.setAttribute("aria-expanded", open ? "true" : "false"); }
   more.addEventListener("click", function () { set(true); });
@@ -400,6 +427,14 @@ document.querySelectorAll(".fmore").forEach(function (b) {
 
 document.querySelectorAll("[data-show]").forEach(function (b) {
   b.addEventListener("click", function () { var t = document.getElementById(b.getAttribute("data-show")); t.hidden = !t.hidden; b.textContent = t.hidden ? "Show the numbers" : "Hide the numbers"; });
+});
+
+document.querySelectorAll("[data-copy]").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var t = b.parentNode.querySelector("code").textContent;
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { b.textContent = "Copied"; }, function () { b.textContent = "Select and copy"; });
+    setTimeout(function () { b.textContent = "Copy"; }, 1600);
+  });
 });
 </script>
 </body>

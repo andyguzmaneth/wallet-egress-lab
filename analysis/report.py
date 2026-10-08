@@ -513,7 +513,7 @@ def main():
         "FB": str(to_backend), "FR": str(to_rpc), "FS": str(to_safe_other), "FT": str(to_third), "FC": str(max(to_custom, 0)),
         "THIRDADDR": esc(", ".join(third_addr) or "none"), "NTHIRDADDR": str(len(third_addr)),
         "IDLERPM": f"{idle_rpm:.0f}", "GA": str(len(ga)), "GAADDR": str(len(ga_addr)),
-        "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a), "LATSVG": svg_latency(proj), "UNITS": svg_units(reqs), "LEGEND": legend(),
+        "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a), "LATSVG": svg_latency(proj), "UNITS": svg_units(reqs), "REPRO": repro_html("Run it yourself: one command per step, about 30 minutes"), "LEGEND": legend(),
         "ROUTING": routing(reqs), "BREAKDOWN": breakdown(sens), "RAILMAINNET": '<li><a href="#mainnet" data-rail="mainnet"><span class="tick"></span><span class="label">Mainnet pass</span></a></li>' if m else "", "BACK": esc(args.back),
         "DATE": time.strftime("%Y-%m-%d", time.gmtime(a["t0"])), "NSTEPS": str(len(a["windows"])), "INV": "".join(inv_rows), "MATRIX": "".join(mat_rows), "PROJ": proj_rows,
         "CUSTOM": esc(custom_note), "MAINNET": mainnet_html, "FAILS": fail_note,
@@ -634,6 +634,43 @@ def narrative(a, reqs, sens, idle_win, ga, ga_addr):
     return fh, rh, title
 
 
+REPO = "https://github.com/andyguzmaneth/wallet-egress-lab"
+REPRO_CMDS = """git clone https://github.com/andyguzmaneth/wallet-egress-lab && cd wallet-egress-lab
+npm install && npx playwright install chromium
+uv tool install mitmproxy                        # mitmdump on PATH; Xvfb from your distro
+
+npx tsx driver/keys.ts                           # owner keys A, B and outside account R
+FUNDER_KEY=0x... npx tsx driver/keys.ts fund     # sends about 0.4 Sepolia ETH to A, B, R
+
+scripts/run.sh baseline                          # blank browser, about 3 min
+scripts/run.sh sepolia                           # full journey, about 20 min
+MITM_PORT=8083 scripts/run.sh mainnet            # read-only pass, about 7 min
+
+python3 -I analysis/analyze.py runs/<run> --baseline runs/<baseline-run>   # once per run
+python3 -I analysis/report.py --sepolia runs/<sepolia-run> --mainnet runs/<mainnet-run> --site docs"""
+REPRO_TECH = [
+    ("Capture every request with bodies", "mitmproxy addon, browser QUIC off", "capture/record.py"),
+    ("Keep keys out of the capture", "injected EIP-1193 signer in Node", "driver/signer.ts"),
+    ("Script the user", "Playwright steps with start and end markers", "driver/journey.ts"),
+    ("Remove the browser's own traffic", "blank-page baseline run", "scripts/run.sh baseline"),
+    ("Find what each request reveals", "search URLs, headers, bodies for known identifiers", "analysis/analyze.py"),
+    ("Estimate latency cost", "longest sequential chain x added latency per hop", "analysis/report.py"),
+]
+
+
+def repro_html(heading: str) -> str:
+    rows = "".join(f"<tr><td>{esc(a)}</td><td class=sub>{esc(b)}</td><td><code>{esc(c)}</code></td></tr>" for a, b, c in REPRO_TECH)
+    return f"""<section id="reproduce">
+  <div class="eyebrow">Reproduce</div>
+  <h2>{heading}</h2>
+  <p>You need Linux with Node 20 or later, Python 3.11 or later, Xvfb, and one Sepolia key with about 0.4 ETH. Source and README: <a href="{REPO}">{REPO.removeprefix("https://")}</a>.</p>
+  <div class="codebox"><button type="button" class="copy" data-copy>Copy</button><pre><code>{esc(REPRO_CMDS)}</code></pre></div>
+  <h3>Techniques and where they live</h3>
+  <div class="scroll"><table class="mini repro">{rows}</table></div>
+  <p class="sub">To test another wallet, replace the steps in <code>driver/journey.ts</code>; capture, analysis and report stay the same. Each run adds a folder under <code>docs/runs/</code> and a row in the run index.</p>
+</section>"""
+
+
 TEMPLATE = (Path(__file__).parent / "template.html").read_text()
 INDEX_TEMPLATE = (Path(__file__).parent / "index.html").read_text()
 
@@ -647,7 +684,7 @@ def build_index(site: Path):
         f'<td class=num>{esc(x["backend_pct"])}</td><td class=num>{esc(x["rpc_pct"])}</td>'
         f'<td class=num>{x["steps_ok"]}/{x["steps"]}</td></tr>' for x in metas)
     latest = f'runs/{esc(metas[0]["run"])}/index.html' if metas else "#"
-    (site / "index.html").write_text(INDEX_TEMPLATE.replace("{{ROWS}}", rows).replace("{{LATEST}}", latest).replace("{{N}}", str(len(metas))))
+    (site / "index.html").write_text(INDEX_TEMPLATE.replace("{{ROWS}}", rows).replace("{{LATEST}}", latest).replace("{{N}}", f"{len(metas)} run{'' if len(metas) == 1 else 's'}").replace("{{REPRO}}", repro_html("Run it yourself")))
     (site / ".nojekyll").write_text("")
     print("wrote", site / "index.html")
 

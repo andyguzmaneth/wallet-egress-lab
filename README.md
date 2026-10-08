@@ -8,14 +8,14 @@ The first target is Safe{Wallet} (app.safe.global). The capture, analysis and
 report do not depend on Safe. Only `driver/journey.ts` holds Safe-specific steps.
 
 ```
-npm install
-uv tool install mitmproxy            # mitmdump on PATH
+npm install && npx playwright install chromium
+uv tool install mitmproxy            # mitmdump on PATH; install Xvfb from your distro
 npx tsx driver/keys.ts               # create secrets/keys.json (owners A, B, outside account R)
-FUNDER_KEY=0x... npx tsx driver/keys.ts fund   # fund A, B, R on Sepolia
+FUNDER_KEY=0x... npx tsx driver/keys.ts fund   # sends about 0.4 Sepolia ETH to A, B, R
 
 scripts/run.sh baseline              # blank browser: the browser's own traffic
 scripts/run.sh sepolia               # full journey with writes, about 20 min
-scripts/run.sh mainnet               # read-only pass on a public Safe
+MITM_PORT=8083 scripts/run.sh mainnet  # read-only pass on a public Safe
 
 python3 -I analysis/analyze.py runs/<sepolia-run> --baseline runs/<baseline-run>
 python3 -I analysis/analyze.py runs/<mainnet-run> --baseline runs/<baseline-run>
