@@ -201,6 +201,7 @@ svg .lblbg { fill: var(--surface-0); } svg .steplbl { pointer-events: none; } sv
 .thesis li { margin: 0 0 6px; }
 .thesis li b { color: var(--accent); }
 .thesis { margin: 0; }
+.plan { padding-left: 18px; margin: 6px 0; max-width: 860px; font-size: 14px; color: var(--text-secondary); } .plan li { margin: 0 0 6px; } .plan b { color: var(--text-primary); font-weight: 600; }
 .thesis { font-family: Georgia, "Times New Roman", serif; font-size: 22px; line-height: 1.4; color: var(--text-primary); max-width: 860px; margin: 10px 0 8px; text-wrap: pretty; }
 .methodline { color: var(--text-muted); font-size: 13.5px; margin: 0; }
 .acts { list-style: none; padding: 0; margin: 4px 0 0; counter-reset: a; }
@@ -274,6 +275,15 @@ mark.m-ctx { background: none; outline: 1.5px solid var(--text-muted); }
   <p class="sub">Each bar is the extra wait for one action when only its address-linked requests go over Tor, measured against the same journey on clearnet. This run used a native Tor client. Inside a web page Tor runs as tor-js, which is slower today: {{TORJS}} per request against 1.4 s here, plus {{TORJS_BOOT}} to start once per session.</p>
   <div class="scroll">{{LATSVG}}</div>
   <p class="sub">{{FULLTOR}}</p>
+  <h3>Where we plan to cut the wait</h3>
+  <p class="sub">These are first numbers from one network in one configuration. Most of the wait comes from requests that wait on each other, so the path and the request pattern both matter.</p>
+  <ul class="plan">
+    <li><b>Fewer round trips.</b> Batch the dependent reads into one request, and fetch them while the app is idle so an action does not wait on them.</li>
+    <li><b>A warm connection.</b> Start Tor when the app loads and keep circuits open, so the startup cost never lands on a send or a swap.</li>
+    <li><b>Shorter paths.</b> An onion service run by the provider removes the exit hop; circuit length and reuse are settings to test.</li>
+    <li><b>Other networks.</b> Tor is one anonymity network. Mixnets such as Nym, and modes with different delay and cover-traffic settings, trade latency against protection differently. A swap can use a faster mode than background polling.</li>
+  </ul>
+  <p class="sub">We will measure each option on this same journey.</p>
   <p class="sub"><button type="button" class="readmore" data-show="lat-table">Show the numbers</button></p>
   <div id="lat-table" hidden><div class="scroll"><table class="mini">
     <thead><tr><th>Action</th><th class=num>Requests routed over Tor</th><th class=num>Added wait</th></tr></thead>
