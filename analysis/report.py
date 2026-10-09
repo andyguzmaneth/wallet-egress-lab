@@ -221,7 +221,7 @@ def svg_latency(proj) -> str:
     W, left, rh = 1000, 250, 26
     H = len(proj) * rh + 34
     mx = max(max(x["hi"], x["meas"] or 0) for x in proj) or 1
-    x = lambda v: left + (W - left - 70) * v / mx
+    x = lambda v: left + (W - left - 200) * v / mx
     step = 5 if mx <= 40 else 10
     out = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Added wait per action with anon-RPC: estimated range and measured">']
     for v in range(0, int(mx) + 1, step):
@@ -506,9 +506,21 @@ def main():
         d = chain(rs)
         meas = None
         if tor_a and any(x["name"] == s for x in tor_a["windows"]) and all(t["ok"] for t in tor_a["steps"] if t["name"] == s):
-            meas = max(0.0, crit(tor_a, s) - crit(clear_a, s))
+            # Compare with the same-day clearnet run; fall back to the main run where that step failed.
+            ref = clear_a if all(t["ok"] for t in clear_a["steps"] if t["name"] == s) else a
+            meas = max(0.0, crit(tor_a, s) - crit(ref, s))
         proj.append({"step": s, "n": len(rs), "depth": d, "lo": d * TORJS_LO, "hi": d * TORJS_HI, "meas": meas})
 
+    # With every request on Tor, including the app's own code: how much longer the scripted steps took.
+    full_tor = ""
+    if tor_a:
+        dur = lambda run: {t["name"]: t["ms"] / 1000 for t in run["steps"] if t["ok"]}
+        dt, dc, da = dur(tor_a), dur(clear_a), dur(a)
+        ui = ["cold_load", "view_assets", "view_history", "send_propose_A", "swap_quote", "custom_rpc_set"]
+        diffs = [dt[n] - dc.get(n, da.get(n, dt[n])) for n in ui if n in dt]
+        if diffs:
+            full_tor = (f"With every request on Tor, including the app's own code, opening the app, viewing assets and history, proposing a send and "
+                        f"getting a swap quote took {secs(min(diffs))} to {secs(max(diffs))} s longer per step.")
     tc = Counter(r["tier"] for r in reqs)
     inv = inventory(a)
     mat = matrix(a)
@@ -592,8 +604,9 @@ def main():
                    f'<li><b>{free} fixes</b> add no latency and can ship now; {len(acts) - free} more form an opt-in privacy mode on anon-RPC and PIR. Together they cover {"all " + num(len(sens)) if covered == len(sens) else pct(covered, len(sens))}.</li>'),
         "PICT_T": f"Safe's backend alone receives {pct(to_backend, len(sens))} of the address-linked requests",
         "FIX_T": f"{len(acts)} changes cover {cover} address-linked requests; {free} add no latency",
-        "LAT_T": f"anon-RPC in the browser adds an estimated {secs(lo)} to {secs(hi)} s per action"
-                 + (f"; measured over Tor: {secs(min(ms))} to {secs(max(ms))} s" if ms else ""),
+        "LAT_T": (f"Measured over Tor, routing the address-linked calls added {secs(min(ms))} to {secs(max(ms))} s per action" if ms
+                  else f"anon-RPC in the browser adds an estimated {secs(lo)} to {secs(hi)} s per action"),
+        "FULLTOR": full_tor,
         "SESSION_T": f"The app keeps sending the Safe address while idle, a burst every {gap:.0f} s" if gap else "The session, request by request",
         "FIXES": "".join(fix_html), "MAINBODY": mainnet_body,
         "RUN": esc(a["run"]), "DATE": time.strftime("%Y-%m-%d", time.gmtime(a["t0"])), "BACK": esc(args.back),

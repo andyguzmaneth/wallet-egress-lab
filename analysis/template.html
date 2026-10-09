@@ -271,8 +271,9 @@ mark.m-ctx { background: none; outline: 1.5px solid var(--text-muted); }
 <section id="latency">
   <div class="eyebrow">Latency cost</div>
   <h2>{{LAT_T}}</h2>
-  <p class="sub">The bar is an estimate for tor-js in the browser: the longest chain of dependent address-linked requests (each starting within {{GAP}} s of the previous one ending) times {{TORJS}} per call. Requests that the "Ship now" fixes remove are left out. The dot is the added time measured on the same journey run through Tor. Starting tor-js takes {{TORJS_BOOT}} once per session.</p>
+  <p class="sub">The bar is an estimate for tor-js in the browser: the longest chain of dependent address-linked requests (each starting within {{GAP}} s of the previous one ending) times {{TORJS}} per call. Requests that the "Ship now" fixes remove are left out. The dot is the added time measured on the same journey run through a Tor client. Starting tor-js takes {{TORJS_BOOT}} once per session.</p>
   <div class="legend"><span><i class="sw t2"></i>Estimate, tor-js</span><span><i class="sw t3"></i>Measured over Tor</span></div>
+  <p class="sub">{{FULLTOR}}</p>
   <div class="scroll">{{LATSVG}}</div>
   <p class="sub"><button type="button" class="readmore" data-show="lat-table">Show the numbers</button></p>
   <div id="lat-table" hidden><div class="scroll"><table class="mini">

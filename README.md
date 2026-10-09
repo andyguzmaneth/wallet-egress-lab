@@ -20,6 +20,12 @@ MITM_PORT=8083 scripts/run.sh mainnet  # read-only pass on a public Safe
 python3 -I analysis/analyze.py runs/<sepolia-run> --baseline runs/<baseline-run>
 python3 -I analysis/analyze.py runs/<mainnet-run> --baseline runs/<baseline-run>
 python3 -I analysis/report.py --sepolia runs/<sepolia-run> --mainnet runs/<mainnet-run> --site docs
+python3 -I analysis/verify.py runs/<sepolia-run> runs/<baseline-run>   # recount headline numbers from the raw capture
+
+# Measured latency: run the journey through Tor (HTTPTunnelPort) and on clearnet, then pass both
+UPSTREAM=http://127.0.0.1:9080 scripts/run.sh sepolia sepolia-tor
+scripts/run.sh sepolia sepolia-clear
+python3 -I analysis/report.py --sepolia runs/<sepolia-run> --mainnet runs/<mainnet-run> --tor runs/<tor-run> --clear runs/<clear-run> --site docs
 ```
 
 ## How a run works
