@@ -599,9 +599,9 @@ def main():
     free = sum(1 for x in acts if x[5] == "No added latency")
     cover = "all " + num(len(sens)) if covered == len(sens) else pct(covered, len(sens)) + " of the"
     vals = {
-        "THESIS": (f'<li><b>{pct(len(sens), len(reqs))}</b> of requests ({num(len(sens))} of {num(len(reqs))}) carry the Safe or an owner address, or a pending order, together with the user\'s IP address.</li>'
+        "THESIS": (f'<li><b>{pct(len(sens), len(reqs))}</b> of requests ({num(len(sens))} of {num(len(reqs))}) link the Safe or its owners to the user\'s IP.</li>'
                    f'<li><b>{pct(to_backend + to_rpc + to_safe_other, len(sens))}</b> of those go to Safe\'s own services, {pct(to_third, len(sens))} to third parties and {pct(to_custom, len(sens))} to the user\'s RPC.</li>'
-                   f'<li><b>{free} fixes</b> add no latency and can ship now; {len(acts) - free} more form an opt-in privacy mode on anon-RPC and PIR. Together they cover {"all " + num(len(sens)) if covered == len(sens) else pct(covered, len(sens))}.</li>'),
+                   f'<li><b>{len(acts)} fixes</b> cover {"all " + num(len(sens)) if covered == len(sens) else pct(covered, len(sens))}: {free} can ship now, {len(acts) - free} need anon-RPC or PIR.</li>'),
         "PICT_T": f"Safe's backend alone receives {pct(to_backend, len(sens))} of the address-linked requests",
         "FIX_T": f"{len(acts)} changes cover {cover} address-linked requests; {free} add no latency",
         "LAT_T": (f"Measured over Tor, routing the address-linked calls added {secs(min(ms))} to {secs(max(ms))} s per action" if ms
