@@ -13,24 +13,27 @@ import statistics
 from collections import Counter, defaultdict
 from pathlib import Path
 
-TIER_NAMES = ["Address-free", "Telemetry & fingerprint", "Address-linked read", "Intent before chain"]
+TIER_NAMES = ["Address-free", "Telemetry & fingerprint", "Address-linked read", "Transaction details before signing"]
 TIER_HELP = [
     "No address or client ID; the receiver still sees the IP address, the time and what was fetched.",
-    "A client or device ID that links visits over time, without an address.",
+    "A client or device ID, without an address.",
     "The Safe address or an owner address, which the receiver links to the IP address.",
     "What the user is about to do (recipient, amount, calldata, signature) before it is on chain.",
 ]
 CONTEXT_CATS = {"RPC: account & contract reads", "Swap: prices & token search", "RPC: tx tracking", "RPC: name resolution (ENS)"}
-ID_SHORT = {"Safe address": "Safe", "Owner address": "Owner", "Counterparty": "Counterparty", "Tx hash / order id": "Tx id", "Persistent client ID": "Client ID"}
-ID_COLS = ["Safe address", "Owner address", "Counterparty", "Tx hash / order id", "Persistent client ID"]
+ID_SHORT = {"Safe address": "Safe", "Owner address": "Owner", "Counterparty": "Counterparty", "Tx hash / order id": "Tx id", "Client ID": "Client ID"}
+ID_COLS = ["Safe address", "Owner address", "Counterparty", "Tx hash / order id", "Client ID"]
 OPERATOR_ORDER = ["Safe", "CoW Protocol", "Google Analytics", "WalletConnect (Reown)", "Sentry", "LaunchDarkly",
                   "Cloudflare", "Custom RPC (user-set)"]
 
 # Assumed added latency per sequential request, in seconds. Sources are in the Method section.
 TOR = 1.5          # Arti/Tor p50 for an RPC call (pir-wallet-bench, kass-tor run, 2026-10-06)
-TORJS = 2.0        # tor-js in the browser, p50 per call (anon-RPC bench)
+TORJS_LO, TORJS_HI = 0.93, 3.19   # tor-js in the browser, p50 per call, range over 7 runs (bench-runs 2026-09-18/21)
+TORJS_BOOT = "12 to 50 s"         # tor-js bootstrap, same runs
+PIR_TOR = "3 to 4 s"              # PIR over a native Tor client, p50 (pir-wallet-bench kass-tor: balance 2.9 s, all 4.2 s)
+PIR_BROWSER = "10 to 18 s"        # PIR-sized request over tor-js, p50 (bench-runs 2026-09-18/21)
+GAP = 0.5                         # a request depends on another if it starts within GAP s of that one ending
 PIR = 1.75         # PIR balance lookup p50 over clearnet (pir-wallet-bench clean1)
-WINDOW = 15        # seconds after an action used for the latency projection
 
 TECH = {
     "static": ("Plain path; self-host third-party assets", 0.0),
@@ -49,7 +52,7 @@ CAT_TECH = {
     "Tx preview & simulation": "intent", "Tx security scan": "intent", "Tx proposal & signatures": "intent",
     "RPC: chain status": "rpc_public", "RPC: gas & fees": "rpc_public", "RPC: account & contract reads": "rpc_read",
     "RPC: tx tracking": "rpc_read", "RPC: name resolution (ENS)": "rpc_name", "RPC: sanctions screening": "rpc_sanctions",
-    "RPC: broadcast": "intent", "Swap: order history (12 chains x 2 envs)": "backend_read",
+    "RPC: broadcast": "intent", "Swap: order history": "backend_read",
     "Swap: balance watcher": "backend_read", "Swap: prices & token search": "rpc_public", "Swap: quote": "intent",
     "Swap: order submit & tracking": "intent", "Swap: notifications": "backend_read", "Analytics": "telemetry",
     "Error reporting": "telemetry", "Feature flags": "telemetry", "Bot challenge": "challenge", "IP geolocation": "challenge",
@@ -91,16 +94,17 @@ def kb(n) -> str:
     return f"{n / 1024:.0f} KB" if n < 1024 * 1024 else f"{n / 1048576:.1f} MB"
 
 
-def dep_depth(reqs) -> int:
-    """Longest chain of requests where each starts after the previous one ended."""
+def chain(reqs, weight=lambda r: 1):
+    """Heaviest chain of requests where each starts within GAP s of the previous one ending (a likely dependency)."""
     rs = sorted(reqs, key=lambda r: r["t"])
     best = []
     for i, r in enumerate(rs):
-        d = 1
+        b = weight(r)
         for j in range(i):
-            if rs[j]["t"] + rs[j]["ms"] / 1000 <= r["t"]:
-                d = max(d, best[j] + 1)
-        best.append(d)
+            gap = r["t"] - (rs[j]["t"] + rs[j]["ms"] / 1000)
+            if 0 <= gap <= GAP:
+                b = max(b, best[j] + weight(r))
+        best.append(b)
     return max(best) if best else 0
 
 
@@ -207,26 +211,36 @@ def svg_steps(a) -> str:
     return "".join(out)
 
 
+def secs(x) -> str:
+    return str(int(x + 0.5))
+
+
 def svg_latency(proj) -> str:
     if not proj:
         return ""
     W, left, rh = 1000, 250, 26
     H = len(proj) * rh + 34
-    mx = max(x["tor_all"] for x in proj) or 1
-    x = lambda v: left + (W - left - 60) * v / mx
-    out = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Estimated added wait per action with anon-RPC">']
-    for v in range(0, int(mx) + 1, 5):
+    mx = max(max(x["hi"], x["meas"] or 0) for x in proj) or 1
+    x = lambda v: left + (W - left - 70) * v / mx
+    step = 5 if mx <= 40 else 10
+    out = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Added wait per action with anon-RPC: estimated range and measured">']
+    for v in range(0, int(mx) + 1, step):
         out.append(f'<line x1="{x(v):.1f}" x2="{x(v):.1f}" y1="4" y2="{H - 22}" class="lane"/>'
                    f'<text x="{x(v):.1f}" y="{H - 6}" class="axis" text-anchor="middle">+{v} s</text>')
     for i, p_ in enumerate(proj):
         y = 16 + i * rh
         lbl = STEP_LABELS.get(p_["step"], p_["step"])
-        b_ = x(p_["tor_all"])
-        tip = f'{lbl}: about +{p_["tor_all"]:.1f} s, {p_["depth"]} sequential address-linked requests x {TOR} s'
+        a_, b_ = x(p_["lo"]), x(p_["hi"])
+        tip = f'{lbl}: estimate +{p_["lo"]:.1f} to {p_["hi"]:.1f} s ({p_["depth"]} dependent requests)'
         out.append(f'<text x="{left - 12}" y="{y + 4}" text-anchor="end" class="lanelbl">{esc(lbl)}</text>')
-        out.append(f'<line x1="{left}" x2="{b_:.1f}" y1="{y}" y2="{y}" class="dumb"/>')
-        out.append(f'<circle cx="{b_:.1f}" cy="{y}" r="5" class="t3" data-tip="{esc(tip)}"/>')
-        out.append(f'<text x="{b_ + 10:.1f}" y="{y + 4}" class="axis">+{p_["tor_all"]:.0f} s</text>')
+        out.append(f'<line x1="{a_:.1f}" x2="{b_:.1f}" y1="{y}" y2="{y}" class="range" data-tip="{esc(tip)}"/>')
+        end = b_
+        if p_["meas"] is not None:
+            mxp = x(p_["meas"])
+            out.append(f'<circle cx="{mxp:.1f}" cy="{y}" r="5" class="t3" data-tip="{esc(lbl)}: measured +{p_["meas"]:.1f} s over Tor"/>')
+            end = max(end, mxp)
+        out.append(f'<text x="{end + 10:.1f}" y="{y + 4}" class="axis">+{secs(p_["lo"])} to {secs(p_["hi"])} s'
+                   + (f' · measured +{secs(p_["meas"])} s' if p_["meas"] is not None else "") + "</text>")
     out.append("</svg>")
     return "".join(out)
 
@@ -344,16 +358,18 @@ def example_html(rec, known) -> str:
         try:
             body = json.dumps(json.loads(body), indent=1)
         except ValueError:
-            body = "\n".join(ln.replace("&", "\n&") if len(ln) > 200 and "=" in ln else ln for ln in body.split("\n"))
+            body = "\n".join((ln.replace("&", "\n&") if "=" in ln and "{" not in ln else ln.replace(',"', ',\n"')) if len(ln) > 200 else ln
+                             for ln in body.split("\n"))
         lines += ["", body]
-    text = "\n".join(lines)
+    text = re.sub(r"0{24,}", "0…0", "\n".join(lines))   # calldata padding
     pats = []
     for label, vals in known.items():
         for v in vals:
             bare = v[2:] if v.lower().startswith("0x") else v
             pats.append((re.compile(r"(?:0x)?" + re.escape(bare), re.I), "m-tx" if label.startswith("Tx") else "m-addr", label))
-    pats.append((re.compile(r"(?<=cid=)[0-9.]+"), "m-id", "Persistent client ID"))
-    pats.append((re.compile(r"did:key:[A-Za-z0-9]+"), "m-id", "Persistent client ID"))
+    pats.append((re.compile(r'"walletAddress"'), "m-ctx", "Address tag"))
+    pats.append((re.compile(r"(?<=cid=)[0-9.]+"), "m-id", "Client ID"))
+    pats.append((re.compile(r"did:key:[A-Za-z0-9]+"), "m-id", "Client ID"))
     pats.append((re.compile(r"\[\d+ bytes, redacted\]"), "m-id", "Cookie or token"))
     pats.append((re.compile(r"gcs=G100|pscdl=denied"), "m-ctx", "Analytics consent denied"))
     spans = sorted((mt.start(), mt.end(), cls, label) for rx, cls, label in pats for mt in rx.finditer(text))
@@ -366,8 +382,8 @@ def example_html(rec, known) -> str:
     line_of = lambda pos: max(k for k, st in enumerate(starts) if st <= pos)
     if len(starts) > 22 and keep:
         sel = {0}
-        for a0, b0, *_ in keep:
-            for ln in range(line_of(a0) - 1, line_of(b0) + 2):
+        for a0, b0, *_ in keep[:10]:
+            for ln in range(line_of(a0), line_of(b0) + 1):
                 if 0 <= ln < len(starts):
                     sel.add(ln)
         ranges = []
@@ -452,6 +468,8 @@ def main():
     ap.add_argument("--out", help="write one report file")
     ap.add_argument("--site", help="site root (docs): writes runs/<run>/index.html and rebuilds the run index")
     ap.add_argument("--back", default="../../index.html")
+    ap.add_argument("--tor", help="the same journey captured over Tor, for measured latency")
+    ap.add_argument("--clear", help="a clearnet run from the same session as --tor, to compare against")
     args = ap.parse_args()
     a = json.loads((Path(args.sepolia) / "analysis.json").read_text())
     m = json.loads((Path(args.mainnet) / "analysis.json").read_text()) if args.mainnet else None
@@ -467,25 +485,29 @@ def main():
     to_third = len(sens) - to_backend - to_rpc - to_safe_other - to_custom
     idle_win = next((w for w in a["windows"] if w["name"] == "idle_home"), None)
 
-    # Latency projection for interactive steps.
+    acts, covered, removed = actions(reqs, sens, idle_win, flows, a.get("known_values") or {})
+    routed = lambda r: r["tier"] >= 2 and not r["preflight"] and not removed(r)
+    tor_a = json.loads((Path(args.tor) / "analysis.json").read_text()) if args.tor else None
+    clear_a = json.loads((Path(args.clear) / "analysis.json").read_text()) if args.clear else a
+
+    def crit(run, step):
+        rs = [r for r in run["requests"] if r["step"] == step and routed(r)]
+        return chain(rs, lambda r: r["ms"] / 1000)
+
+    # Added wait per action: estimate from the dependency chain, and measured when a Tor run is given.
     proj = []
     for w in a["windows"]:
         s = w["name"]
         if s in IDLE_STEPS:
             continue
-        seen, rs = set(), []
-        for r in sorted(reqs, key=lambda r: r["t"]):
-            if r["step"] != s or r["tier"] < 2 or r["t"] > w["t0"] + WINDOW:
-                continue
-            key = (r["host"], r["path"], tuple(r["rpc_methods"]))
-            if key in seen:
-                continue
-            seen.add(key)
-            rs.append(r)
+        rs = [r for r in reqs if r["step"] == s and routed(r)]
         if not rs:
             continue
-        d_all = dep_depth(rs)
-        proj.append({"step": s, "n": len(rs), "depth": d_all, "tor_all": d_all * TOR})
+        d = chain(rs)
+        meas = None
+        if tor_a and any(x["name"] == s for x in tor_a["windows"]) and all(t["ok"] for t in tor_a["steps"] if t["name"] == s):
+            meas = max(0.0, crit(tor_a, s) - crit(clear_a, s))
+        proj.append({"step": s, "n": len(rs), "depth": d, "lo": d * TORJS_LO, "hi": d * TORJS_HI, "meas": meas})
 
     tc = Counter(r["tier"] for r in reqs)
     inv = inventory(a)
@@ -502,13 +524,14 @@ def main():
                        f"{cr_saferpc} still went to Safe's RPC ({', '.join(f'{k.replace("RPC: ", "")} {v}' for k, v in cr_saferpc_m.most_common(3))}), "
                        f"and {cr_backend} address-linked reads went to the Safe backend. The setting replaces the chain RPC only.")
 
-    mainnet_body = "<p>No mainnet pass in this run.</p>"
+    mainnet_body, mainlink = "<p>No mainnet pass in this run.</p>", ""
     if m:
         mreqs = [r for r in m["requests"] if not r["preflight"]]
         s_pairs = {(r["operator"], r["category"]) for r in reqs}
         new = Counter((r["operator"], r["category"]) for r in mreqs if (r["operator"], r["category"]) not in s_pairs)
         msens = [r for r in mreqs if r["tier"] >= 2]
         rows = "".join(f"<tr><td>{esc(o)}</td><td>{esc(c)}</td><td class=num>{n}</td></tr>" for (o, c), n in new.most_common(12))
+        mainlink = f" A read-only mainnet pass found {num(len(msens))} of {num(len(mreqs))} requests address-linked."
         mainnet_body = (f"<p>A read-only pass on mainnet watched a public Safe (<code>{esc(m['safe'][:10])}…</code>): {num(len(mreqs))} requests, "
                         f"{num(len(msens))} of them address-linked. Hosts that appeared on mainnet and not on Sepolia:</p>"
                         f'<div class="scroll"><table class="mini"><thead><tr><th>Operator</th><th>Service</th><th class=num>Requests</th></tr></thead><tbody>{rows or "<tr><td colspan=3>None</td></tr>"}</tbody></table></div>')
@@ -536,17 +559,19 @@ def main():
 
     proj_rows = "".join(
         f'<tr><td>{esc(STEP_LABELS.get(x["step"], x["step"]))}</td><td class=num>{x["n"]}</td>'
-        f'<td class=num>{x["depth"]}</td><td class=num>+{x["tor_all"]:.1f} s</td></tr>' for x in proj)
+        f'<td class=num>{x["depth"]}</td><td class=num>+{x["lo"]:.1f} to {x["hi"]:.1f} s</td>'
+        f'<td class=num>{"" if x["meas"] is None else f"+{x["meas"]:.1f} s"}</td></tr>' for x in proj)
 
     fails = [s for s in a["steps"] if not s["ok"]]
     fail_note = (" Steps that did not complete: " + ", ".join(esc(STEP_LABELS.get(s["name"], s["name"])) for s in fails) + ".") if fails else ""
 
-    acts, covered = actions(reqs, sens, idle_win)
     gap = idle_gap(reqs, idle_win)
-    lo = min((x["tor_all"] for x in proj), default=0)
-    hi = max((x["tor_all"] for x in proj), default=0)
-    groups = [("Remove, or do it locally", "No added latency"), ("Hide the origin: anon-RPC", f"+{TOR} s per sequential call"),
-              ("Hide the content: PIR", f"+{PIR} s per lookup")]
+    lo = min((x["lo"] for x in proj), default=0)
+    hi = max((x["hi"] for x in proj), default=0)
+    ms = [x["meas"] for x in proj if x["meas"] is not None]
+    groups = [("Ship now", "No added latency"),
+              ("Opt-in privacy mode · anon-RPC: requests over Tor hide the IP address", f"+{TORJS_LO:.1f} to {TORJS_HI:.1f} s per call in the browser, {TORJS_BOOT} to start"),
+              ("Opt-in privacy mode · PIR: the server answers without learning the query", f"{PIR} s per lookup; {PIR_TOR} over Tor; {PIR_BROWSER} over Tor in the browser")]
     fix_html = []
     for gi, (gname, gcost) in enumerate(groups):
         rows = [x for x in acts if x[0] == gi]
@@ -555,19 +580,20 @@ def main():
         lis = "".join(
             f'<li><div class="leak">{leak}</div><div class="fix">{fix} <button type="button" class="readmore fmore" aria-expanded="false">more</button>'
             f'<span class="fdet why" hidden> {det}</span></div><div class="chips-row"><span class="tag">{esc(n)}</span>'
-            f'<span class="tag{" free" if c == "No added latency" else ""}">{esc(c)}</span></div></li>'
-            for _, leak, fix, det, n, c in rows)
+            f'<span class="tag{" free" if c == "No added latency" else ""}">{esc(c)}</span>'
+            f'{f"<span class=\"tag owner\">{esc(o)} owns this</span>" if o else ""}</div></li>'
+            for _, leak, fix, det, n, c, o in rows)
         fix_html.append(f'<h3>{esc(gname)} <span class="gcost">{esc(gcost)}</span></h3><ol class="acts">{lis}</ol>')
     free = sum(1 for x in acts if x[5] == "No added latency")
     cover = "all " + num(len(sens)) if covered == len(sens) else pct(covered, len(sens)) + " of the"
     vals = {
-        "THESIS": f"{pct(len(sens), len(reqs))} of the requests ({num(len(sens))} of {num(len(reqs))}) tie the Safe or an owner address to the user's IP address: "
-                  f"{pct(to_backend + to_rpc + to_safe_other, len(sens))} go to Safe's own services, {pct(to_third + to_custom, len(sens))} to third parties and the user's RPC. "
-                  "All of them need hiding. "
-                  f"The {len(acts)} changes below cover {cover.replace(' of the', '')}; {free} add no latency, the rest use anon-RPC or PIR.",
-        "PICT_T": f"Safe's own services receive {pct(to_backend + to_rpc + to_safe_other, len(sens))} of the address-linked requests, third parties {pct(to_third, len(sens))}",
+        "THESIS": (f'<li><b>{pct(len(sens), len(reqs))}</b> of requests ({num(len(sens))} of {num(len(reqs))}) carry the Safe or an owner address, or a pending order, together with the user\'s IP address.</li>'
+                   f'<li><b>{pct(to_backend + to_rpc + to_safe_other, len(sens))}</b> of those go to Safe\'s own services, {pct(to_third, len(sens))} to third parties and {pct(to_custom, len(sens))} to the user\'s RPC.</li>'
+                   f'<li><b>{free} fixes</b> add no latency and can ship now; {len(acts) - free} more form an opt-in privacy mode on anon-RPC and PIR. Together they cover {"all " + num(len(sens)) if covered == len(sens) else pct(covered, len(sens))}.</li>'),
+        "PICT_T": f"Safe's backend alone receives {pct(to_backend, len(sens))} of the address-linked requests",
         "FIX_T": f"{len(acts)} changes cover {cover} address-linked requests; {free} add no latency",
-        "LAT_T": f"Hiding the origin with anon-RPC adds an estimated {lo:.0f} to {hi:.0f} s per action",
+        "LAT_T": f"anon-RPC in the browser adds an estimated {secs(lo)} to {secs(hi)} s per action"
+                 + (f"; measured over Tor: {secs(min(ms))} to {secs(max(ms))} s" if ms else ""),
         "SESSION_T": f"The app keeps sending the Safe address while idle, a burst every {gap:.0f} s" if gap else "The session, request by request",
         "FIXES": "".join(fix_html), "MAINBODY": mainnet_body,
         "RUN": esc(a["run"]), "DATE": time.strftime("%Y-%m-%d", time.gmtime(a["t0"])), "BACK": esc(args.back),
@@ -577,7 +603,8 @@ def main():
         "STEPKEY": "".join(f'<li data-step="{i}"><b>{i + 1}</b> {esc(STEP_LABELS.get(w["name"], w["name"]))}</li>' for i, w in enumerate(a["windows"])),
         "MATRIX": "".join(mat_rows), "INV": "".join(inv_rows),
         "TIERHELP": "".join(f'<li><span><i class="sw t{t}"></i><b>{esc(TIER_NAMES[t])}.</b> {esc(TIER_HELP[t])}</span><span class="n">{num(tc[t])} requests</span></li>' for t in range(4)),
-        "TOR": f"{TOR}", "TORJS": f"{TORJS}", "PIR": f"{PIR}", "WINDOW": str(WINDOW), "FAILS": fail_note,
+        "TOR": f"{TOR}", "TORJS": f"{TORJS_LO:.1f} to {TORJS_HI:.1f} s", "TORJS_BOOT": TORJS_BOOT, "PIR": f"{PIR}", "PIR_TOR": PIR_TOR,
+        "PIR_BROWSER": PIR_BROWSER, "GAP": f"{GAP}", "FAILS": fail_note, "MAINLINK": mainlink,
         "COOKIES": "necessary only" if a.get("cookies") == "necessary" else "accept all", "REPO": REPO, "CUSTOM": esc(custom_note),
     }
 
@@ -621,59 +648,81 @@ SAFE_BACKEND_CATS = {"Account state", "Targeted messaging", "Tx preview & simula
                      "Tx proposal & signatures", "Security screening (Zodiac)"}
 
 
-def actions(reqs, sens, idle_win):
-    """The brief's fix list. Each row: group, leak, fix, detail, tag, cost, predicate over requests."""
+def cow_network(r):
+    return r["path"].split("/")[1] if r["path"].count("/") > 2 else ""
+
+
+def actions(reqs, sens, idle_win, flows, known):
+    """The fix list. Each row: group, leak, fix, detail, cost, owner, predicate over requests."""
     is_rpc = lambda r: r["category"].startswith("RPC:")
+    hist = [r for r in sens if r["category"] == "Swap: order history"]
+    active = Counter(cow_network(r) for r in hist if r["host"] == "api.cow.fi").most_common(1)
+    active = active[0][0] if active else ""
+    fanout = lambda r: r["category"] == "Swap: order history" and not (r["host"] == "api.cow.fi" and cow_network(r) == active)
+    n_prod = len({cow_network(r) for r in hist if r["host"] == "api.cow.fi"})
+    n_barn = len({cow_network(r) for r in hist if r["host"].startswith("barn.")})
+    safe_addr = (known.get("Safe address") or [""])[0].lower()
+    pages = [r for r in sens if r["operator"] == "Safe" and CAT_TECH.get(r["category"]) == "static"]
+    in_url = sum(1 for r in pages if safe_addr and safe_addr[2:] in flows.get(r.get("fid"), {}).get("url", "").lower())
+    ens = [r for r in sens if r["category"] == "RPC: name resolution (ENS)"]
+    ens_main = sum(1 for r in ens if r["host"] == "rpc.safe.global" and r["path"].startswith("/1/"))
+    per_call = f"+{TORJS_LO:.1f} to {TORJS_HI:.1f} s per call"
     rows = [
         (0, "Google Analytics receives the Safe and owner addresses, with analytics declined.",
          "Send nothing without consent; drop addresses from events and URLs.",
-         "Consent mode was set to denied, so Google drops cookies but still receives the event parameter <code>ep.safeAddress</code>, "
-         "the user property <code>up.walletAddress</code> and the page URL with <code>?safe=</code>.",
-         "No added latency", lambda r: r["operator"] == "Google Analytics"),
-        (0, "Page loads send the Safe address to Safe's web host in the URL.", "Keep the address in client state or the URL fragment.",
-         "Requests for page code and data carry <code>?safe=</code> in the query string, which the host and its CDN can log.",
-         "No added latency", lambda r: r["operator"] == "Safe" and CAT_TECH.get(r["category"]) == "static"),
-        (0, "Error reports to Sentry include the Safe address.", "Strip addresses before a report leaves the browser.",
-         "The CoW widget's Sentry reports carry the Safe address in breadcrumbs and URLs.",
-         "No added latency", lambda r: r["operator"] == "Sentry"),
-        (0, "The CoW widget asks about the Safe on 12 chains and two environments.", "Query the active chain and the production API only.",
-         "Order history is fetched for every supported chain on both <code>api.cow.fi</code> and <code>barn.api.cow.fi</code>. "
-         "The widget also looks up the user's IP address and country at <code>api.country.is</code>; that check can run server-side.",
-         "No added latency", lambda r: r["category"].startswith("Swap: order history")),
+         "Consent mode was denied, so Google drops cookies but still receives <code>ep.safeAddress</code>, <code>up.walletAddress</code> and the page URL. "
+         "The client ID changes on each page load; the address is what links the visits.",
+         "No added latency", None, lambda r: r["operator"] == "Google Analytics"),
+        (0, "Page loads send the Safe address to Safe's web host, in the URL or the Referer header.",
+         "Keep the address out of URLs and set a strict Referrer-Policy.",
+         f"{in_url} requests carry <code>?safe=</code> in the URL and {len(pages) - in_url} in the Referer header; the host and its CDN can log both.",
+         "No added latency", None, lambda r: r["operator"] == "Safe" and CAT_TECH.get(r["category"]) == "static"),
+        (0, "Sanctions checks send the Safe and owner addresses to Safe's mainnet RPC, even on Sepolia.",
+         "Check against a local copy of the public list.",
+         "The checks call the Chainalysis oracle with <code>isSanctioned</code>. The list is small and can be rebuilt from the oracle's events, "
+         "so the check stays and the address stays on the device.",
+         "No added latency", None, lambda r: r["category"] == "RPC: sanctions screening"),
+        (0, "The CoW widget's error reports to Sentry tag the Safe address.", "Strip addresses before a report leaves the browser.",
+         "The address travels in a <code>walletAddress</code> tag and in request URLs.",
+         "No added latency", "CoW", lambda r: r["operator"] == "Sentry"),
+        (0, f"The CoW widget asks about the Safe on {n_prod} chains in production and {n_barn} on staging.",
+         "Query the active chain and the production API only.",
+         "The same widget looks up the user's IP address and country at <code>api.country.is</code>; that check can run server-side.",
+         "No added latency", "CoW", fanout),
         (0, "WalletConnect reports a persistent client ID although it is not used.", "Load the SDK only when the user picks WalletConnect.",
          "Requests to <code>pulse.walletconnect.org</code> carry a <code>did:key</code> client ID from the first page load.",
-         "No added latency", lambda r: r["operator"] == "WalletConnect (Reown)"),
-        (1, "Safe's backend links the IP address to the Safe address, including transaction content before signing.",
+         "No added latency", "Reown", lambda r: r["operator"] == "WalletConnect (Reown)"),
+        (1, "Safe's backend sees the IP address with the Safe address, including transaction details before signing.",
          "Send backend calls through the anon-RPC transport (Tor).",
-         f"The idle app asks about the Safe every {idle_gap(reqs, idle_win):.0f} s, and preview and threat analysis send the full SafeTx before the user signs. "
-         "The Tor client that carries anon-RPC can carry these HTTPS calls too, so the backend sees the request and not the IP address. "
-         "Polling less also lowers the number of samples.",
-         f"+{TOR} s per sequential call", lambda r: r["operator"] == "Safe" and r["category"] in SAFE_BACKEND_CATS),
-        (1, "CoW's API links the Safe address, quotes and orders to the IP address.", "Send CoW API calls through the same anon-RPC transport.",
+         f"The idle app asks about the Safe every {idle_gap(reqs, idle_win):.0f} s. Tor hides the IP address; Safe still sees which Safe, which owner and the pending transaction. "
+         "The app page has to load over Tor too, or timing links the two.",
+         per_call, None, lambda r: r["operator"] == "Safe" and r["category"] in SAFE_BACKEND_CATS),
+        (1, "CoW's API sees the IP address with the Safe address, quotes and orders.", "Send CoW API calls through the same anon-RPC transport.",
          "Quotes, order submission, order tracking, notifications and the balance watcher all name the Safe.",
-         f"+{TOR} s per sequential call", lambda r: r["operator"] == "CoW Protocol" and not is_rpc(r) and not r["category"].startswith("Swap: order history")),
-        (1, "ENS reverse lookups send the owner addresses to an RPC.", "Resolve names over anon-RPC and cache the results.",
-         "On Sepolia these lookups still go to Safe's mainnet RPC. Names change rarely; a PIR name index can replace the lookup later.",
-         f"+{TOR} s per lookup", lambda r: r["category"] == "RPC: name resolution (ENS)"),
+         per_call, "CoW", lambda r: r["operator"] == "CoW Protocol" and not is_rpc(r) and not fanout(r)),
+        (1, f"ENS reverse lookups send owner and recipient addresses to an RPC; {ens_main} of {len(ens)} go to Safe's mainnet RPC during this Sepolia session.",
+         "Resolve names over anon-RPC and cache the results.",
+         "Names change rarely; a PIR name index can replace the lookup later.",
+         per_call, None, lambda r: r["category"] == "RPC: name resolution (ENS)"),
         (2, "Every balance refresh tells Safe's backend which Safe the user holds.", "Read balances and tokens with PIR instead.",
-         "A PIR lookup returns the same balances without the server learning which account was asked about.",
-         f"+{PIR} s per PIR lookup", lambda r: r["operator"] == "Safe" and r["category"] == "Account state" and "/balances" in r["path"]),
-        (2, "Sanctions checks send the Safe and owner addresses to Safe's mainnet RPC, even on Sepolia.", "Check the sanctions list over PIR, or against a local copy.",
-         "The checks call the Chainalysis oracle with <code>isSanctioned</code>. The list is public, so a local copy also works and adds no latency.",
-         f"+{PIR} s per PIR lookup", lambda r: r["category"] == "RPC: sanctions screening"),
+         "A PIR lookup returns the balance without the server learning which account was asked about.",
+         f"+{PIR_BROWSER} per lookup", None, lambda r: r["operator"] == "Safe" and r["category"] == "Account state" and "/balances" in r["path"]),
         (2, "RPC reads of balance, nonce, code and transaction status name the address, on Safe's RPC, CoW's nodes and a custom RPC alike.",
-         "anon-RPC for the origin; PIR for the reads made on open.",
-         f"Over Tor each sequential read adds about {TOR} s; a PIR balance lookup costs about {PIR} s and 760 KB upload, so PIR fits the reads made on open, not polling.",
-         f"+{TOR} s Tor, +{PIR} s PIR", lambda r: is_rpc(r) and r["category"] not in ("RPC: name resolution (ENS)", "RPC: sanctions screening")),
+         "anon-RPC for the origin; PIR for ETH balance, nonce and listed tokens.",
+         "Contract calls, simulation and gas estimates stay on anon-RPC.",
+         f"{per_call}; +{PIR_BROWSER} per PIR lookup", None, lambda r: is_rpc(r) and r["category"] not in ("RPC: name resolution (ENS)", "RPC: sanctions screening")),
     ]
     out, covered = [], set()
-    for g, leak, fix, det, cost, pred in rows:
+    removed = [pred for g, *_, pred in rows if g == 0]
+    for g, leak, fix, det, cost, owner, pred in rows:
         mine = [r for r in sens if pred(r)]
         if not mine:
             continue
+        dup = sum(1 for r in mine if id(r) in covered)
         covered |= {id(r) for r in mine}
-        out.append((g, leak, fix, det, f"{num(len(mine))} address-linked", cost))
-    return out, len(covered)
+        tag = f"{num(len(mine))} address-linked" + (f", {num(dup)} also above" if dup else "")
+        out.append((g, leak, fix, det, tag, cost, owner))
+    return out, len(covered), (lambda r: any(p(r) for p in removed))
 
 
 def idle_gap(reqs, idle_win) -> float:

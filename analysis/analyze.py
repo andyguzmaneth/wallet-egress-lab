@@ -9,7 +9,7 @@ client IDs), a sensitivity tier, wire bytes and latency.
 import json
 import re
 import sys
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -60,7 +60,7 @@ CATS = {
     "RPC: name resolution (ENS)": "rpc_name",
     "RPC: sanctions screening": "rpc_sanctions",
     "RPC: broadcast": "intent",
-    "Swap: order history (12 chains x 2 envs)": "backend_read",
+    "Swap: order history": "backend_read",
     "Swap: balance watcher": "backend_read",
     "Swap: prices & token search": "rpc_public",
     "Swap: quote": "intent",
@@ -160,7 +160,7 @@ def category(rec: dict) -> str:
         if STATIC_RE.search(path):
             return "App code & assets"
         if re.search(r"/account/0x[0-9a-fA-F]{40}/orders", path):
-            return "Swap: order history (12 chains x 2 envs)"
+            return "Swap: order history"
         if host.startswith("balances-watcher"):
             return "Swap: balance watcher"
         if path.endswith("/quote"):
@@ -205,9 +205,9 @@ def identifiers(rec: dict, known: dict) -> list:
                 break
     q = parse_qs(urlparse(rec["url"]).query)
     if "cid" in q and operator(rec["host"]) == "Google Analytics":
-        found.append("Persistent client ID")
+        found.append("Client ID")
     if '"client_id":"did:key' in hay:
-        found.append("Persistent client ID")
+        found.append("Client ID")
     if header(rec, "cookie"):
         found.append("Cookie")
     return sorted(set(found))
@@ -219,7 +219,7 @@ def tier(cat: str, ids: list) -> int:
         return 3
     if addr:
         return 2
-    if cat in TELEMETRY_CATS or "Persistent client ID" in ids:
+    if cat in TELEMETRY_CATS or "Client ID" in ids:
         return 1
     return 0
 

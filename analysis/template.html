@@ -75,6 +75,7 @@ svg .axis { fill: var(--text-muted); font-size: 11px; }
 svg .steplbl { fill: var(--text-primary); font-size: 9.5px; font-weight: 600; }
 svg .stepdot { fill: var(--surface-0); stroke: var(--text-muted); stroke-width: 1; } svg .steptick { stroke: var(--text-muted); stroke-width: 1; opacity: .5; }
 svg .lane { stroke: var(--grid); stroke-width: 1; }
+svg .range { stroke: var(--t2); stroke-width: 6; stroke-linecap: round; opacity: .55; }
 svg .dumb { stroke: var(--text-muted); stroke-width: 2; opacity: .6; }
 svg .band.b0 { fill: var(--band-a); } svg .band.b1 { fill: var(--band-b); }
 .t0 { fill: var(--t0); background: var(--t0); } .t1 { fill: var(--t1); background: var(--t1); }
@@ -196,7 +197,10 @@ svg .stepdot.hl { fill: var(--t2); stroke: var(--t2); } svg .steplbl.hl { fill: 
 svg .lblbg { fill: var(--surface-0); } svg .steplbl { pointer-events: none; } svg .stepdot { cursor: pointer; }
 
 .insight { margin: 18px 0 10px; padding-left: 16px; border-left: 3px solid var(--accent); }
-.insight .thesis { margin: 0; }
+.insight .thesis { list-style: none; padding: 0; }
+.thesis li { margin: 0 0 6px; }
+.thesis li b { color: var(--accent); }
+.thesis { margin: 0; }
 .thesis { font-family: Georgia, "Times New Roman", serif; font-size: 22px; line-height: 1.4; color: var(--text-primary); max-width: 860px; margin: 10px 0 8px; text-wrap: pretty; }
 .methodline { color: var(--text-muted); font-size: 13.5px; margin: 0; }
 .acts { list-style: none; padding: 0; margin: 4px 0 0; counter-reset: a; }
@@ -205,6 +209,7 @@ svg .lblbg { fill: var(--surface-0); } svg .steplbl { pointer-events: none; } sv
 .acts .fix { font-weight: 600; font-size: 14.5px; }
 .acts .fix .why { font-weight: 400; color: var(--text-secondary); font-size: 14px; }
 .acts .chips-row { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.acts .tag.owner { border-style: dashed; }
 .acts .tag.free { color: var(--text-primary); border-color: var(--text-muted); }
 .acthead { display: grid; grid-template-columns: 1fr 1fr 240px; gap: 22px; font-size: 12px; color: var(--text-muted); font-weight: 600; margin-top: 10px; } .acthead span:last-child { text-align: right; }
 h3 .gcost { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12.5px; font-weight: 500; color: var(--text-muted); margin-left: 6px; }
@@ -242,7 +247,7 @@ mark.m-ctx { background: none; outline: 1.5px solid var(--text-muted); }
   <div class="kicker"><a class="back" href="{{BACK}}">All runs</a> · Safe{Wallet} web · Sepolia · {{DATE}} · <a href="{{OTHER}}">{{OTHERLBL}}</a></div>
   <h1>{{H1}}</h1>
   <div class="insight"><div class="eyebrow">Summary</div>
-  <p class="thesis">{{THESIS}}</p></div>
+  <ul class="thesis">{{THESIS}}</ul></div>
   <p class="methodline">One scripted user, {{NSTEPS}} actions on Sepolia, {{DUR}} minutes, every request recorded at a proxy. <a href="#apx-method">Method</a></p>
 </header>
 
@@ -258,6 +263,7 @@ mark.m-ctx { background: none; outline: 1.5px solid var(--text-muted); }
 <section id="fix">
   <div class="eyebrow">What to change</div>
   <h2>{{FIX_T}}</h2>
+  <p>Safe already routes RPC through eRPC, so upstream providers see Safe's IP addresses, not users', and the cookie banner lets users decline analytics. The gaps: Safe's own services still receive the IP address with the Safe address, and Google Analytics receives addresses after analytics is declined.</p>
   <div class="acthead"><span>What leaks</span><span>Fix</span><span>Reach and cost</span></div>
   {{FIXES}}
 </section>
@@ -265,14 +271,15 @@ mark.m-ctx { background: none; outline: 1.5px solid var(--text-muted); }
 <section id="latency">
   <div class="eyebrow">Latency cost</div>
   <h2>{{LAT_T}}</h2>
-  <p class="sub">An estimate, not a measurement: for each action, the longest chain of address-linked requests that wait on each other, times {{TOR}} s, the median added time of one request over Tor (Arti client). Requests that run in parallel share one delay.</p>
+  <p class="sub">The bar is an estimate for tor-js in the browser: the longest chain of dependent address-linked requests (each starting within {{GAP}} s of the previous one ending) times {{TORJS}} per call. Requests that the "Ship now" fixes remove are left out. The dot is the added time measured on the same journey run through Tor. Starting tor-js takes {{TORJS_BOOT}} once per session.</p>
+  <div class="legend"><span><i class="sw t2"></i>Estimate, tor-js</span><span><i class="sw t3"></i>Measured over Tor</span></div>
   <div class="scroll">{{LATSVG}}</div>
   <p class="sub"><button type="button" class="readmore" data-show="lat-table">Show the numbers</button></p>
   <div id="lat-table" hidden><div class="scroll"><table class="mini">
-    <thead><tr><th>Action</th><th class=num>Distinct address-linked requests</th><th class=num>Sequential chain</th><th class=num>Added over Tor</th></tr></thead>
+    <thead><tr><th>Action</th><th class=num>Requests routed over Tor</th><th class=num>Dependent chain</th><th class=num>Estimate, tor-js</th><th class=num>Measured over Tor</th></tr></thead>
     <tbody>{{PROJ}}</tbody>
   </table></div>
-  <p class="sub">Each bar is the longest chain of address-linked requests that run one after another in the first {{WINDOW}} s of the action, times the added latency per request. An upper bound. Sources: Tor through an Arti client {{TOR}} s p50, measured; tor-js in the browser {{TORJS}} s p50; PIR balance lookup {{PIR}} s p50, about 760 KB upload.</p></div>
+  <p class="sub">Sources: tor-js p50 per call {{TORJS}}, bootstrap {{TORJS_BOOT}} (seven bench runs, 2026-09-18 and 09-21). PIR {{PIR}} s per lookup without Tor, about 760 KB upload; {{PIR_TOR}} over a native Tor client; {{PIR_BROWSER}} for a PIR-sized request over tor-js. Measured: the journey run once through a Tor client (C tor) and once on clearnet, the same day; the dot is the difference along the dependent chain.</p></div>
   <p class="sub">{{CUSTOM}}</p>
 </section>
 
@@ -310,7 +317,7 @@ mark.m-ctx { background: none; outline: 1.5px solid var(--text-muted); }
   <div class="apx-item" id="apx-inv"><h3><button type="button" class="apx-toggle" aria-expanded="false" aria-controls="apx-inv-b">Endpoint inventory</button></h3><div class="apx-body" id="apx-inv-b" hidden>
   <div class="chips" id="chips">
     <button type="button" aria-pressed="true" data-t="all">All</button>
-    <button type="button" aria-pressed="false" data-t="3">Intent</button>
+    <button type="button" aria-pressed="false" data-t="3">Tx details</button>
     <button type="button" aria-pressed="false" data-t="2">Address-linked</button>
     <button type="button" aria-pressed="false" data-t="1">Telemetry</button>
     <button type="button" aria-pressed="false" data-t="0">Address-free</button>
@@ -327,6 +334,7 @@ mark.m-ctx { background: none; outline: 1.5px solid var(--text-muted); }
   <div class="apx-item" id="apx-method"><h3><button type="button" class="apx-toggle" aria-expanded="false" aria-controls="apx-method-b">Method and tiers</button></h3><div class="apx-body" id="apx-method-b" hidden>
   <p>Chromium (Playwright, fresh profile, QUIC off) ran behind mitmproxy, so every request from the page, its iframes and its service worker was recorded with headers and bodies. The signer was an injected EIP-1193 provider whose keys and RPC stay outside the browser. A blank-page baseline run removed the browser's own traffic. Identifiers were found by searching URLs, headers and bodies for the Safe address, the owners, the counterparty, safeTxHash, CoW order ids and analytics client IDs. Cookie banner choice: {{COOKIES}}. Each request gets the highest tier whose rule it matches:</p>
   <ol class="tierhelp">{{TIERHELP}}</ol>
+  <p>Limits: one scripted run on Sepolia, fresh browser cache, necessary-only cookies.{{MAINLINK}} Not measured: the signer's own RPC and the broadcast of the signed transaction; over Tor, Cloudflare challenges and IP geofencing can block calls.</p>
   <p>Setup and the full command list: <a href="{{REPO}}">repository README</a>.</p>
   </div></div>
 </section>

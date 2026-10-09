@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Run one capture: scripts/run.sh <plan> [label]   (plan: sepolia | mainnet | baseline)
+# UPSTREAM=http://127.0.0.1:9080 sends all app traffic onward through an HTTP CONNECT proxy, e.g. Tor's HTTPTunnelPort.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 PLAN=$1; LABEL=${2:-$PLAN}
 RUN=runs/$(date -u +%Y%m%dT%H%M%SZ)-$LABEL
 MP=${MITM_PORT:-8082}
 mkdir -p "$RUN"
-mitmdump -q -p "$MP" -s capture/record.py --set out="$RUN/flows.jsonl" > "$RUN/mitm.log" 2>&1 &
+mitmdump -q -p "$MP" ${UPSTREAM:+--mode upstream:$UPSTREAM} -s capture/record.py --set out="$RUN/flows.jsonl" > "$RUN/mitm.log" 2>&1 &
 MITM=$!
 trap 'kill $MITM 2>/dev/null || true' EXIT
 sleep 2
