@@ -271,16 +271,15 @@ mark.m-ctx { background: none; outline: 1.5px solid var(--text-muted); }
 <section id="latency">
   <div class="eyebrow">Latency cost</div>
   <h2>{{LAT_T}}</h2>
-  <p class="sub">The bar is an estimate for tor-js in the browser: the longest chain of dependent address-linked requests (each starting within {{GAP}} s of the previous one ending) times {{TORJS}} per call. Requests that the "Ship now" fixes remove are left out. The dot is the added time measured on the same journey run through a Tor client. Starting tor-js takes {{TORJS_BOOT}} once per session.</p>
-  <div class="legend"><span><i class="sw t2"></i>Estimate, tor-js</span><span><i class="sw t3"></i>Measured over Tor</span></div>
-  <p class="sub">{{FULLTOR}}</p>
+  <p class="sub">Each bar is the extra wait for one action when only its address-linked requests go over Tor, measured against the same journey on clearnet. This run used a native Tor client. Inside a web page Tor runs as tor-js, which is slower today: {{TORJS}} per request against 1.4 s here, plus {{TORJS_BOOT}} to start once per session.</p>
   <div class="scroll">{{LATSVG}}</div>
+  <p class="sub">{{FULLTOR}}</p>
   <p class="sub"><button type="button" class="readmore" data-show="lat-table">Show the numbers</button></p>
   <div id="lat-table" hidden><div class="scroll"><table class="mini">
-    <thead><tr><th>Action</th><th class=num>Requests routed over Tor</th><th class=num>Dependent chain</th><th class=num>Estimate, tor-js</th><th class=num>Measured over Tor</th></tr></thead>
+    <thead><tr><th>Action</th><th class=num>Requests routed over Tor</th><th class=num>Added wait</th></tr></thead>
     <tbody>{{PROJ}}</tbody>
   </table></div>
-  <p class="sub">Sources: tor-js p50 per call {{TORJS}}, bootstrap {{TORJS_BOOT}} (seven bench runs, 2026-09-18 and 09-21). PIR {{PIR}} s per lookup without Tor, about 760 KB upload; {{PIR_TOR}} over a native Tor client; {{PIR_BROWSER}} for a PIR-sized request over tor-js. Measured: the journey run once through a Tor client (C tor) and once on clearnet, the same day; the dot is the difference along the dependent chain.</p></div>
+  <p class="sub">Method: the journey ran once through a Tor client (C tor) and once on clearnet, the same day; the added wait is the difference along each action's longest chain of dependent address-linked requests. tor-js figures: {{TORJS}} median per request and {{TORJS_BOOT}} startup over seven bench runs (2026-09-18 and 09-21). PIR: {{PIR}} s per lookup without Tor, about 760 KB upload; {{PIR_TOR}} over a native Tor client; {{PIR_BROWSER}} for a PIR-sized request over tor-js.</p></div>
   <p class="sub">{{CUSTOM}}</p>
 </section>
 

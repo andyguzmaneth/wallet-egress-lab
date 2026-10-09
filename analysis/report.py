@@ -216,31 +216,33 @@ def secs(x) -> str:
 
 
 def svg_latency(proj) -> str:
+    """Added wait per action over Tor, measured; the tor-js estimate range only when no Tor run exists."""
     if not proj:
         return ""
+    measured = any(p_["meas"] is not None for p_ in proj)
     W, left, rh = 1000, 250, 26
     H = len(proj) * rh + 34
-    mx = max(max(x["hi"], x["meas"] or 0) for x in proj) or 1
+    mx = max((p_["meas"] or 0) if measured else p_["hi"] for p_ in proj) or 1
     x = lambda v: left + (W - left - 200) * v / mx
-    step = 5 if mx <= 40 else 10
-    out = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Added wait per action with anon-RPC: estimated range and measured">']
+    step = 1 if mx <= 10 else 5 if mx <= 40 else 10
+    out = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Added wait per action with the address-linked requests on Tor">']
     for v in range(0, int(mx) + 1, step):
         out.append(f'<line x1="{x(v):.1f}" x2="{x(v):.1f}" y1="4" y2="{H - 22}" class="lane"/>'
                    f'<text x="{x(v):.1f}" y="{H - 6}" class="axis" text-anchor="middle">+{v} s</text>')
     for i, p_ in enumerate(proj):
         y = 16 + i * rh
         lbl = STEP_LABELS.get(p_["step"], p_["step"])
-        a_, b_ = x(p_["lo"]), x(p_["hi"])
-        tip = f'{lbl}: estimate +{p_["lo"]:.1f} to {p_["hi"]:.1f} s ({p_["depth"]} dependent requests)'
         out.append(f'<text x="{left - 12}" y="{y + 4}" text-anchor="end" class="lanelbl">{esc(lbl)}</text>')
-        out.append(f'<line x1="{a_:.1f}" x2="{b_:.1f}" y1="{y}" y2="{y}" class="range" data-tip="{esc(tip)}"/>')
-        end = b_
-        if p_["meas"] is not None:
-            mxp = x(p_["meas"])
-            out.append(f'<circle cx="{mxp:.1f}" cy="{y}" r="5" class="t3" data-tip="{esc(lbl)}: measured +{p_["meas"]:.1f} s over Tor"/>')
-            end = max(end, mxp)
-        out.append(f'<text x="{end + 10:.1f}" y="{y + 4}" class="axis">+{secs(p_["lo"])} to {secs(p_["hi"])} s'
-                   + (f' · measured +{secs(p_["meas"])} s' if p_["meas"] is not None else "") + "</text>")
+        if not measured:
+            a_, b_ = x(p_["lo"]), x(p_["hi"])
+            out.append(f'<line x1="{a_:.1f}" x2="{b_:.1f}" y1="{y}" y2="{y}" class="range" data-tip="{esc(lbl)}: estimate +{p_["lo"]:.1f} to {p_["hi"]:.1f} s"/>'
+                       f'<text x="{b_ + 10:.1f}" y="{y + 4}" class="axis">+{secs(p_["lo"])} to {secs(p_["hi"])} s</text>')
+        elif p_["meas"] is None:
+            out.append(f'<text x="{left:.1f}" y="{y + 4}" class="axis">not measured</text>')
+        else:
+            b_ = max(x(p_["meas"]), left + 4)
+            out.append(f'<rect x="{left}" y="{y - 5}" width="{b_ - left:.1f}" height="10" rx="4" class="t3" data-tip="{esc(lbl)}: +{p_["meas"]:.1f} s over Tor, {p_["n"]} requests routed"/>'
+                       f'<text x="{b_ + 10:.1f}" y="{y + 4}" class="axis">+{p_["meas"]:.1f} s</text>')
     out.append("</svg>")
     return "".join(out)
 
@@ -571,8 +573,7 @@ def main():
 
     proj_rows = "".join(
         f'<tr><td>{esc(STEP_LABELS.get(x["step"], x["step"]))}</td><td class=num>{x["n"]}</td>'
-        f'<td class=num>{x["depth"]}</td><td class=num>+{x["lo"]:.1f} to {x["hi"]:.1f} s</td>'
-        f'<td class=num>{"" if x["meas"] is None else f"+{x["meas"]:.1f} s"}</td></tr>' for x in proj)
+        f'<td class=num>{"not measured" if x["meas"] is None else f"+{x["meas"]:.1f} s"}</td></tr>' for x in proj)
 
     fails = [s for s in a["steps"] if not s["ok"]]
     fail_note = (" Steps that did not complete: " + ", ".join(esc(STEP_LABELS.get(s["name"], s["name"])) for s in fails) + ".") if fails else ""
@@ -604,7 +605,7 @@ def main():
                    f'<li><b>{len(acts)} fixes</b> cover {"all " + num(len(sens)) if covered == len(sens) else pct(covered, len(sens))}: {free} can ship now, {len(acts) - free} need anon-RPC or PIR.</li>'),
         "PICT_T": f"Safe's backend alone receives {pct(to_backend, len(sens))} of the address-linked requests",
         "FIX_T": f"{len(acts)} changes cover {cover} address-linked requests; {free} add no latency",
-        "LAT_T": (f"Measured over Tor, routing the address-linked calls added {secs(min(ms))} to {secs(max(ms))} s per action" if ms
+        "LAT_T": (f"Routing the address-linked requests over Tor added {min(ms):.1f} to {max(ms):.1f} s per action" if ms
                   else f"anon-RPC in the browser adds an estimated {secs(lo)} to {secs(hi)} s per action"),
         "FULLTOR": full_tor,
         "SESSION_T": f"The app keeps sending the Safe address while idle, a burst every {gap:.0f} s" if gap else "The session, request by request",
