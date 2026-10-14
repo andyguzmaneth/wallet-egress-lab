@@ -247,6 +247,10 @@ def svg_latency(proj) -> str:
     return "".join(out)
 
 
+GROUP_LABEL = {"Safe backend API": "Safe API", "Safe RPC": "Safe's Ethereum RPC", "Safe web app": "Safe app files",
+               "Third parties": "Third parties", "Custom RPC": "User's own RPC"}
+
+
 def svg_units(reqs) -> str:
     """One square per request, grouped by receiver, colored by tier."""
     groups = ["Safe backend API", "Safe RPC", "Safe web app", "Third parties", "Custom RPC"]
@@ -262,12 +266,12 @@ def svg_units(reqs) -> str:
             c, rr = divmod(i, rows)
             body.append(f'<rect x="{x0 + c * cell:.1f}" y="{top + rr * cell:.1f}" width="{sq}" height="{sq}" rx="1" class="t{r["tier"]}"/>')
         linked = sum(1 for r in rs if r["tier"] >= 2)
-        tip = f"{g}: {num(len(rs))} requests, {num(linked)} address-linked"
+        tip = f"{GROUP_LABEL[g]}: {num(len(rs))} requests, {num(linked)} address-linked"
         key = {"Safe backend API": "backend", "Safe RPC": "rpc", "Safe web app": "web", "Third parties": "third", "Custom RPC": "custom"}[g]
         body.append(f'<rect x="{x0 - 2:.1f}" y="{top - 2}" width="{cols * cell + 3:.1f}" height="{rows * cell + 3:.1f}" rx="3" class="ugrp" data-b="{key}" data-tip="{esc(tip)}"/>')
-        body.append(f'<text x="{x0:.1f}" y="12" class="ulbl">{esc(g)}</text><text x="{x0:.1f}" y="27" class="axis">{num(len(rs))}</text>')
-        lbl_right = max(lbl_right, x0 + len(g) * 8.6 + 6)
-        x0 += cols * cell + gap
+        body.append(f'<text x="{x0:.1f}" y="12" class="ulbl">{esc(GROUP_LABEL[g])}</text><text x="{x0:.1f}" y="27" class="axis">{num(len(rs))}</text>')
+        lbl_right = max(lbl_right, x0 + len(GROUP_LABEL[g]) * 7.6 + 6)
+        x0 += max(cols * cell, len(GROUP_LABEL[g]) * 7.6) + gap
     W = max(x0 - gap, lbl_right)
     out.append(f'<svg viewBox="-2 0 {W + 4:.0f} {top + rows * cell + 4:.0f}" class="units" role="img" aria-label="Every request as one square, grouped by receiver and colored by tier">')
     out += body
@@ -275,9 +279,10 @@ def svg_units(reqs) -> str:
     return "".join(out)
 
 
-def legend() -> str:
+def legend(desc=False) -> str:
+    tiers = list(enumerate(TIER_NAMES))
     return '<div class="legend">' + "".join(
-        f'<span><i class="sw t{t}"></i>{esc(n)}</span>' for t, n in enumerate(TIER_NAMES)) + "</div>"
+        f'<span><i class="sw t{t}"></i>{esc(n)}</span>' for t, n in (tiers[::-1] if desc else tiers)) + "</div>"
 
 
 def mixbar(mix):
@@ -442,7 +447,7 @@ def breakdown(sens, flows=None, known=None) -> str:
                             f'<tr class="exrow" id="{xid}" hidden><td></td><td colspan="2">{example_html(flows[pick["fid"]], known or {})}</td></tr>')
             else:
                 rows.append(f"<tr><td class=num>{n}</td><td>{who}{esc(c)}<div><code>{esc(ex)}</code></div></td><td></td></tr>")
-        out.append(f'<div class="bdp" id="bd-{key}" hidden><h4>{esc(b)}: {len(rs)} address-linked requests</h4>'
+        out.append(f'<div class="bdp" id="bd-{key}" hidden><h4>{esc(GROUP_LABEL[b])}: {len(rs)} address-linked requests</h4>'
                    f'<table>{"".join(rows) or "<tr><td>None</td></tr>"}</table></div>')
     return "".join(out)
 
@@ -583,7 +588,7 @@ def main():
     hi = max((x["hi"] for x in proj), default=0)
     ms = [x["meas"] for x in proj if x["meas"] is not None]
     groups = [("Ship now", "No added latency"),
-              ("Opt-in privacy mode · anon-RPC: requests over Tor hide the IP address", f"+{TORJS_LO:.1f} to {TORJS_HI:.1f} s per call in the browser, {TORJS_BOOT} to start"),
+              ("Opt-in privacy mode · anon-RPC: requests over Tor hide the IP address", f"+{TORJS_LO:.1f} to {TORJS_HI:.1f} s per call in the browser, plus startup ({TORJS_BOOT} when cold)"),
               ("Opt-in privacy mode · PIR: the server answers without learning the query", f"{PIR} s per lookup; {PIR_TOR} over Tor; {PIR_BROWSER} over Tor in the browser")]
     fix_html = []
     for gi, (gname, gcost) in enumerate(groups):
@@ -603,7 +608,7 @@ def main():
         "THESIS": (f'<li><b>{pct(len(sens), len(reqs))}</b> of requests ({num(len(sens))} of {num(len(reqs))}) link the Safe or its owners to the user\'s IP.</li>'
                    f'<li><b>{pct(to_backend + to_rpc + to_safe_other, len(sens))}</b> of those go to Safe\'s own services, {pct(to_third, len(sens))} to third parties and {pct(to_custom, len(sens))} to the user\'s RPC.</li>'
                    f'<li><b>{len(acts)} fixes</b> cover {"all " + num(len(sens)) if covered == len(sens) else pct(covered, len(sens))}: {free} can ship now, {len(acts) - free} need anon-RPC or PIR.</li>'),
-        "PICT_T": f"Safe's backend alone receives {pct(to_backend, len(sens))} of the address-linked requests",
+        "PICT_T": f"The Safe API alone receives {pct(to_backend, len(sens))} of the address-linked requests",
         "FIX_T": f"{len(acts)} changes cover {cover} address-linked requests; {free} add no latency",
         "LAT_T": (f"Routing the address-linked requests over Tor added {min(ms):.1f} to {max(ms):.1f} s per action" if ms
                   else f"anon-RPC in the browser adds an estimated {secs(lo)} to {secs(hi)} s per action"),
@@ -611,7 +616,7 @@ def main():
         "SESSION_T": f"The app keeps sending the Safe address while idle, a burst every {gap:.0f} s" if gap else "The session, request by request",
         "FIXES": "".join(fix_html), "MAINBODY": mainnet_body,
         "RUN": esc(a["run"]), "DATE": time.strftime("%Y-%m-%d", time.gmtime(a["t0"])), "BACK": esc(args.back),
-        "NSTEPS": str(len(a["windows"])), "DUR": f"{dur_min:.0f}", "LEGEND": legend(), "UNITS": svg_units(reqs),
+        "NSTEPS": str(len(a["windows"])), "DUR": f"{dur_min:.0f}", "LEGEND": legend(), "LEGEND_DESC": legend(desc=True), "UNITS": svg_units(reqs),
         "BREAKDOWN": breakdown(sens, flows, a.get("known_values")), "LATSVG": svg_latency(proj), "PROJ": proj_rows,
         "TIMELINE": svg_timeline(a), "STEPS": svg_steps(a),
         "STEPKEY": "".join(f'<li data-step="{i}"><b>{i + 1}</b> {esc(STEP_LABELS.get(w["name"], w["name"]))}</li>' for i, w in enumerate(a["windows"])),

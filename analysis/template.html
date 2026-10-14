@@ -9,7 +9,7 @@
   color-scheme: light;
   --surface-0: #f6f5f2; --surface-1: #fcfcfb; --border: #e3e2dd; --grid: #ebeae6;
   --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7a7974;
-  --t0: #d3d2cc; --t1: #9a9993; --t2: #2a78d6; --t3: #104281; --seg-web: #86b6ef;
+  --t0: #dcdbd5; --t1: #6f6e69; --t2: #2a78d6; --t3: #104281; --seg-web: #86b6ef;
   --band-a: #f1f0ec; --band-b: #fcfcfb;
   --h1: #e6effb; --h2: #b7d3f6; --h3: #6da7ec; --h4: #2a78d6; --h5: #104281;
   --h-ink-dark: #ffffff;
@@ -20,7 +20,7 @@
     color-scheme: dark;
     --surface-0: #121211; --surface-1: #1a1a19; --border: #2e2e2c; --grid: #262624;
     --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
-    --t0: #3b3b38; --t1: #74736d; --t2: #3987e5; --t3: #9ec5f4; --seg-web: #1c5cab;
+    --t0: #353532; --t1: #a3a29b; --t2: #3987e5; --t3: #9ec5f4; --seg-web: #1c5cab;
     --band-a: #202020; --band-b: #1a1a19;
     --h1: #1d2a3a; --h2: #184f95; --h3: #256abf; --h4: #3987e5; --h5: #9ec5f4;
     --accent: #3987e5;
@@ -30,7 +30,7 @@
   color-scheme: dark;
   --surface-0: #121211; --surface-1: #1a1a19; --border: #2e2e2c; --grid: #262624;
   --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
-  --t0: #3b3b38; --t1: #74736d; --t2: #3987e5; --t3: #9ec5f4; --seg-web: #1c5cab;
+  --t0: #353532; --t1: #a3a29b; --t2: #3987e5; --t3: #9ec5f4; --seg-web: #1c5cab;
   --band-a: #202020; --band-b: #1a1a19;
   --h1: #1d2a3a; --h2: #184f95; --h3: #256abf; --h4: #3987e5; --h5: #9ec5f4;
   --accent: #3987e5;
@@ -255,9 +255,9 @@ mark.m-ctx { background: none; outline: 1.5px solid var(--text-muted); }
 <section id="picture">
   <div class="eyebrow">The picture</div>
   <h2>{{PICT_T}}</h2>
-  {{LEGEND}}
+  {{LEGEND_DESC}}
   <div class="unitwrap scroll">{{UNITS}}</div>
-  <p class="sub hint">One square per request. Select a group to see what it contains.</p>
+  <p class="sub hint">One square per request. Safe API serves balances, history and pending transactions. Safe's Ethereum RPC is the default node the app reads the chain through. User's own RPC is the node set in the last steps, which replaces Safe's RPC for chain reads only. Select a group to see what it contains.</p>
   {{BREAKDOWN}}
 </section>
 
@@ -272,7 +272,7 @@ mark.m-ctx { background: none; outline: 1.5px solid var(--text-muted); }
 <section id="latency">
   <div class="eyebrow">Latency cost</div>
   <h2>{{LAT_T}}</h2>
-  <p class="sub">Each bar is the extra wait for one action when only its address-linked requests go over Tor, measured against the same journey on clearnet. This run used a native Tor client. Inside a web page Tor runs as tor-js, which is slower today: {{TORJS}} per request against 1.4 s here, plus {{TORJS_BOOT}} to start once per session.</p>
+  <p class="sub">Each bar is the extra wait for one action when only its address-linked requests go over Tor, measured against the same journey on clearnet. This run used a native Tor client. Inside a web page Tor runs as tor-js, which is slower today: {{TORJS}} per request against 1.4 s here, plus startup time ({{TORJS_BOOT}} when cold, less when stored state is fresh).</p>
   <div class="scroll">{{LATSVG}}</div>
   <p class="sub">{{FULLTOR}}</p>
   <h3>Where we plan to cut the wait</h3>
@@ -289,7 +289,7 @@ mark.m-ctx { background: none; outline: 1.5px solid var(--text-muted); }
     <thead><tr><th>Action</th><th class=num>Requests routed over Tor</th><th class=num>Added wait</th></tr></thead>
     <tbody>{{PROJ}}</tbody>
   </table></div>
-  <p class="sub">Method: the journey ran once through a Tor client (C tor) and once on clearnet, the same day; the added wait is the difference along each action's longest chain of dependent address-linked requests. tor-js figures: {{TORJS}} median per request and {{TORJS_BOOT}} startup over seven bench runs (2026-09-18 and 09-21). PIR: {{PIR}} s per lookup without Tor, about 760 KB upload; {{PIR_TOR}} over a native Tor client; {{PIR_BROWSER}} for a PIR-sized request over tor-js.</p></div>
+  <p class="sub">Method: the journey ran once through a Tor client (C tor) and once on clearnet, the same day; the added wait is the difference along each action's longest chain of dependent address-linked requests. tor-js figures: {{TORJS}} median per request and {{TORJS_BOOT}} cold startup over seven bench runs (2026-09-18 and 09-21). PIR: {{PIR}} s per lookup without Tor, about 760 KB upload; {{PIR_TOR}} over a native Tor client; {{PIR_BROWSER}} for a PIR-sized request over tor-js.</p></div>
   <p class="sub">{{CUSTOM}}</p>
 </section>
 
