@@ -59,14 +59,13 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
   <div class="kicker">wallet-egress-lab</div>
   <h1>Wallet Egress Inventory</h1>
   <p>Each run plays a scripted user through a web wallet behind a recording proxy, then classifies every request by who receives it and what it reveals: address-free, telemetry, address-linked, or intent before chain. Each report ends with a routing plan: which calls stay on the plain path, which need the origin hidden (OHTTP relay or anon-RPC), and which need the content hidden (PIR).</p>
-  <a class="latest" href="runs/20261008T150313Z-sepolia/index.html">Open the latest report</a>
+  <a class="latest" href="runs/20261106T162812Z-sepolia-1106/index.html">Open the latest report</a>
   <section>
     <h2>Runs</h2>
     <div class="scroll"><table>
       <thead><tr><th>Date</th><th>Wallet and plan</th><th class=num>Length</th><th class=num>Requests</th><th class=num>Address-linked</th><th class=num>To Safe backend</th><th class=num>To Safe RPC</th><th class=num>Steps done</th></tr></thead>
-      <tbody><tr><td><a href="runs/20261008T150313Z-sepolia/index.html">2026-10-08 15:03 UTC</a><div class=sub>20261008T150313Z-sepolia · <a href="runs/20261008T150313Z-sepolia/full.html">full report</a></div></td><td>Safe{Wallet} web<div class=sub>Sepolia journey + mainnet read-only pass</div></td><td class=num>14 min</td><td class=num>2,056</td><td class=num>859<div class=sub>42%</div></td><td class=num>52%</td><td class=num>13%</td><td class=num>17/17</td></tr></tbody>
+      <tbody><tr><td><a href="runs/20261106T162812Z-sepolia-1106/index.html">2026-11-06 16:28 UTC</a><div class=sub>20261106T162812Z-sepolia-1106 · <a href="runs/20261106T162812Z-sepolia-1106/full.html">full report</a></div></td><td>Safe{Wallet} web<div class=sub>Sepolia journey</div></td><td class=num>13 min</td><td class=num>1,929</td><td class=num>764<div class=sub>40%</div></td><td class=num>59%</td><td class=num>14%</td><td class=num>17/17</td></tr><tr><td><a href="runs/20261008T150313Z-sepolia/index.html">2026-10-08 15:03 UTC</a><div class=sub>20261008T150313Z-sepolia · <a href="runs/20261008T150313Z-sepolia/full.html">full report</a></div></td><td>Safe{Wallet} web<div class=sub>Sepolia journey + mainnet read-only pass</div></td><td class=num>14 min</td><td class=num>2,056</td><td class=num>859<div class=sub>42%</div></td><td class=num>52%</td><td class=num>13%</td><td class=num>17/17</td></tr><tr><td><a href="runs/20261007T175207Z-sepolia/index.html">2026-10-07 17:52 UTC</a><div class=sub>20261007T175207Z-sepolia · <a href="runs/20261007T175207Z-sepolia/full.html">full report</a></div></td><td>Safe{Wallet} web<div class=sub>Sepolia journey</div></td><td class=num>13 min</td><td class=num>1,849</td><td class=num>751<div class=sub>41%</div></td><td class=num>52%</td><td class=num>12%</td><td class=num>14/17</td></tr><tr><td><a href="runs/20261007T172837Z-sepolia/index.html">2026-10-07 17:28 UTC</a><div class=sub>20261007T172837Z-sepolia · <a href="runs/20261007T172837Z-sepolia/full.html">full report</a></div></td><td>Safe{Wallet} web<div class=sub>Sepolia journey</div></td><td class=num>15 min</td><td class=num>1,924</td><td class=num>786<div class=sub>41%</div></td><td class=num>52%</td><td class=num>13%</td><td class=num>14/17</td></tr></tbody>
     </table></div>
-    <p class="sub">"To Safe backend" and "To Safe RPC" are shares of the address-linked requests.</p>
   </section>
   <section id="reproduce">
   <div class="eyebrow">Reproduce</div>
@@ -76,7 +75,6 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
 npm install &amp;&amp; npx playwright install chromium &amp;&amp; uv tool install mitmproxy
 scripts/run.sh sepolia     # setup, keys and the full command list are in the README</code></pre></div>
 </section>
-  <footer>1 run.</footer>
 </main>
 <script>
 (function () {
