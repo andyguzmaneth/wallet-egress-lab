@@ -59,6 +59,51 @@ executes), idle on the home page, set a custom RPC, review a send, idle.
 Variables: `IDLE_MS` (idle length), `COOKIES=necessary|all` (cookie banner
 choice), `CUSTOM_RPC`, `SAFE` (reuse a Safe), `MAINNET_SAFE`.
 
+## MetaMask
+
+`driver/metamask.ts` runs the same journey in the MetaMask extension. Capture, analysis and report are
+shared; `driver/mm.ts` holds the launch, onboarding and settings helpers.
+
+Pinned build: MetaMask 13.56.0, `metamask-chrome-13.56.0.zip` from
+https://github.com/MetaMask/metamask-extension/releases/tag/v13.56.0
+
+```
+SHA-256 7618eda1fba0ca2068054b69faddb5c511dbb49e7d8e3ad411a8ab90551c7159
+```
+
+The SHA-256 matches the release's `SHA256SUMS`, and the Sigstore bundle verifies against
+`MetaMask/metamask-extension` (`uvx sigstore verify github --bundle <zip>.sigstore.json --repository MetaMask/metamask-extension <zip>`).
+
+```
+mkdir -p vendor/dl && cd vendor/dl
+gh release download v13.56.0 -R MetaMask/metamask-extension -p 'metamask-chrome-13.56.0.zip' -p SHA256SUMS
+sha256sum -c --ignore-missing SHA256SUMS && cd .. && unzip -q dl/metamask-chrome-13.56.0.zip -d metamask-chrome-13.56.0 && cd ..
+
+npx tsx driver/mm-keys.ts            # create secrets/metamask.json (lab recovery phrase, accounts A and B)
+FUNDER_KEY=0x... npx tsx driver/mm-keys.ts fund
+
+DRIVER=metamask scripts/run.sh baseline mm-baseline   # extension loaded, never opened
+DRIVER=metamask scripts/run.sh sepolia mm-sepolia     # full journey, defaults on
+MM=1 ONBOARD=1 ./bin-lab.sh start runs/explore-mm      # exploration session on the home screen
+```
+
+| Safe step | MetaMask step |
+|---|---|
+| cold_load, connect_wallet | cold_load (extension opens its onboarding tab), connect_wallet (import the lab phrase, decline usage data, open the wallet) |
+| (none) | select_sepolia: turn on "Show test networks", filter the home screen to Sepolia |
+| create_safe | add_accounts: add account B, add R as a contact |
+| idle_empty, receive_eth, receive_token | same |
+| view_assets, view_history | view_assets (NFTs, Tokens, import WETH), view_history (Activity) |
+| send_propose_A, send_confirm_execute_B | send_eth: A sends to B and confirms. No multisig equivalent |
+| swap_quote, swap_place_A, swap_execute_B | swap_quote, swap_place on swap.cow.fi through the extension connect flow (MetaMask Swaps lists no testnets) |
+| idle_home, custom_rpc_set, custom_rpc_send_review, custom_rpc_idle | same |
+
+- Use a recovery phrase only once. Backup and sync is on by default, so a run uploads its accounts and
+  contacts, and a later import of the same phrase restores them. The swap also leaves A with an EIP-7702
+  delegation and a WETH allowance. Rotate `secrets/metamask.json` before each journey run, and test the
+  driver with `MM_KEYS=secrets/metamask-explore.json`.
+- Extension pages run LavaMoat scuttling, which blocks `page.evaluate`. Use locators.
+
 ## Notes
 
 - `runs/` and `secrets/` are not committed. Runs hold addresses, signatures and
