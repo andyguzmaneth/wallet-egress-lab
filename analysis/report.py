@@ -615,6 +615,7 @@ def main():
         "FULLTOR": full_tor,
         "SESSION_T": f"The app keeps sending the Safe address while idle, a burst every {gap:.0f} s" if gap else "The session, request by request",
         "FIXES": "".join(fix_html), "MAINBODY": mainnet_body,
+        "GAGAP": ", and Google Analytics receives addresses after analytics is declined" if any(r["operator"] == "Google Analytics" for r in sens) else "",
         "RUN": esc(a["run"]), "DATE": time.strftime("%Y-%m-%d", time.gmtime(a["t0"])), "BACK": esc(args.back),
         "NSTEPS": str(len(a["windows"])), "DUR": f"{dur_min:.0f}", "LEGEND": legend(), "LEGEND_DESC": legend(desc=True), "UNITS": svg_units(reqs),
         "BREAKDOWN": breakdown(sens, flows, a.get("known_values")), "LATSVG": svg_latency(proj), "PROJ": proj_rows,
