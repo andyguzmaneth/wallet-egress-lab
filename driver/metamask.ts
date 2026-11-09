@@ -77,7 +77,47 @@ async function approve(ids: string[], ms = 30000) {
     if (await tid(p, ids[0]).waitFor({ timeout: 10000 }).then(() => true).catch(() => false)) break;
     if (i === 3) throw new Error(`no pending approval (${ids[0]})`);
   }
-  for (const id of ids) await tid(p, id).click({ timeout: ms });
+  // The first id is required; later ids are follow-up screens that some flows skip (13.56 connects in one).
+  if (ids[0] === "confirm-footer-button") return confirmTx(p, ms);
+  await tid(p, ids[0]).click({ timeout: ms });
+  for (const id of ids.slice(1)) await tid(p, id).click({ timeout: 5000 }).catch(() => {});
+}
+
+// A transaction confirmation. Confirm is ignored until the gas estimate has rendered. When the
+// simulation or security scan raises alerts (e.g. "Unnecessary permission" for an unlimited approval),
+// the footer button reads "Review alert" and opens a modal: each alert page needs its acknowledgement
+// ticked and "Got it", then Confirm submits (through a second modal when alerts remain). The loop clicks
+// whatever is showing until the confirmation screen closes, and records each alert's text.
+async function confirmTx(p: Page, ms: number) {
+  await tid(p, "first-gas-field").waitFor({ timeout: ms }).then(() => wait(3000)).catch(() => {});
+  const footer = tid(p, "confirm-footer-button");
+  const seen = new Set<string>();
+  const visible = (id: string) => tid(p, id).isVisible().catch(() => false);
+  for (let i = 0; i < 20; i++) {
+    if (!(await footer.count())) return;
+    const dialog = p.getByRole("dialog").first();
+    const alertIds = ["alert-modal-acknowledge-checkbox", "alert-modal-button", "confirm-alert-modal-submit-button"];
+    if ((await dialog.isVisible().catch(() => false)) || (await Promise.all(alertIds.map(visible))).some(Boolean)) {
+      const text = (await dialog.innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 240);
+      if (text && !seen.has(text)) {
+        seen.add(text);
+        state.notes.push(`Confirmation alert acknowledged: ${text}`);
+        await p.screenshot({ path: `${runDir}/alert-${seen.size}.png` }).catch(() => {});
+      }
+      if (await visible("alert-modal-acknowledge-checkbox")) {
+        const ack = tid(p, "alert-modal-acknowledge-checkbox");
+        if (!(await ack.isChecked().catch(() => false))) await ack.click().catch(() => {});
+      }
+      for (const id of ["confirm-alert-modal-submit-button", "alert-modal-button", "alert-modal-next-button"]) {
+        const b = tid(p, id);
+        if ((await b.isVisible().catch(() => false)) && (await b.isEnabled().catch(() => false))) { await b.click().catch(() => {}); break; }
+      }
+    } else if (await footer.isEnabled().catch(() => false)) {
+      await footer.click({ timeout: 5000 }).catch(() => {});
+    }
+    await wait(2000);
+  }
+  if (await footer.count()) throw new Error("confirmation did not submit");
 }
 
 async function nonce() { return chain.getTransactionCount({ address: mm.A.address, blockTag: "latest" }); }
@@ -197,7 +237,12 @@ if (plan === "baseline") {
     await wallet.getByText("“WETH” was successfully added!").waitFor({ timeout: 15000 });
     await home();
   }, 12000);
-  await step("view_history", async () => { await tid(wallet, "bottom-nav-activity").click(); await tid(wallet, "activity-list-item").first().waitFor({ timeout: 30000 }); }, 12000);
+  // Incoming transfers do not show in Activity on Sepolia (13.56); the list stays empty until A sends.
+  await step("view_history", async () => {
+    await tid(wallet, "bottom-nav-activity").click();
+    await tid(wallet, "activity-list-item").first().or(wallet.getByText("Add funds to your wallet")).first().waitFor({ timeout: 30000 });
+    if (!(await tid(wallet, "activity-list-item").count())) state.notes.push("Activity showed no entries after the two incoming transfers");
+  }, 12000);
   // Safe: send_propose_A + send_confirm_execute_B. MetaMask: A sends to B and confirms.
   await step("send_eth", async () => {
     await home();
@@ -220,7 +265,7 @@ if (plan === "baseline") {
     await approve(["confirm-btn", "page-container-footer-next"]);
     page = dapp;
     await dapp.bringToFront();
-    await dapp.getByRole("button", { name: new RegExp(`^${mm.A.address.slice(0, 6)}`, "i") }).waitFor({ timeout: 30000 });
+    await dapp.getByRole("button", { name: new RegExp(`^(${mm.A.address.slice(0, 6)}|\\d+ Pending)`, "i") }).waitFor({ timeout: 30000 });
     await dapp.getByRole("button", { name: "Not now" }).click({ timeout: 5000 }).catch(() => {});
     await dapp.getByRole("button", { name: "Swap now" }).click({ timeout: 10000 }).catch(() => {});
     await tid(dapp, "token-amount-input").first().waitFor({ timeout: 30000 });
@@ -232,9 +277,14 @@ if (plan === "baseline") {
   // Safe: swap_place_A + swap_execute_B. MetaMask: A approves and places the order in one confirmation.
   await step("swap_place", async () => {
     const d = dapp!;
+    // Testnet pools are thin: CoW blocks the button behind "Swap anyway" when costs exceed ~20% of the amount.
+    const anyway = d.getByRole("checkbox", { name: /Swap anyway/ });
+    if (await anyway.isVisible().catch(() => false)) { await anyway.check(); state.notes.push("CoW required 'Swap anyway' (costs over 20% of the amount)"); }
     await tid(d, "trade-form-blank-button").click({ timeout: 20000 });
     await d.getByRole("button", { name: "Confirm Swap" }).click({ timeout: 20000 });
     await approve(["confirm-footer-button"], 60000);
+    await wait(5000);
+    await page.screenshot({ path: `${runDir}/after-swap-confirm.png` }).catch(() => {});
     page = d;
     await d.bringToFront();
     await d.getByText(/Swap complete|Order filled/).first().waitFor({ timeout: 240000 });
