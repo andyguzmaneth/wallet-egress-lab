@@ -773,14 +773,26 @@ TEMPLATE = (Path(__file__).parent / "template.html").read_text()
 
 def build_index(site: Path):
     metas = sorted((json.loads(f.read_text()) for f in site.glob("runs/*/meta.json")), key=lambda m: m["run"], reverse=True)
-    rows = "".join(
-        f'<tr><td><a href="runs/{esc(x["run"])}/index.html">{esc(x["date"])}</a><div class=sub>{esc(x["run"])} · <a href="runs/{esc(x["run"])}/full.html">full report</a></div></td>'
-        f'<td>{esc(x["wallet"])}<div class=sub>{esc(x["plan"])}</div></td><td class=num>{x["minutes"]} min</td>'
-        f'<td class=num>{num(x["requests"])}</td><td class=num>{num(x["linked"])}<div class=sub>{esc(x["linked_pct"])}</div></td>'
-        f'<td class=num>{esc(x["backend_pct"])}</td><td class=num>{esc(x["rpc_pct"])}</td>'
-        f'<td class=num>{x["steps_ok"]}/{x["steps"]}</td></tr>' for x in metas)
+    stats = lambda x: (f'<td class=num>{x["minutes"]} min</td><td class=num>{num(x["requests"])}</td>'
+                       f'<td class=num>{num(x["linked"])}<div class=sub>{esc(x["linked_pct"])}</div></td>'
+                       f'<td class=num>{esc(x["backend_pct"])}</td><td class=num>{esc(x["rpc_pct"])}</td><td class=num>{x["steps_ok"]}/{x["steps"]}</td>')
+    groups: dict = {}
+    for x in metas:  # newest first, so each group's first run is its latest
+        groups.setdefault((x["wallet"], x["plan"].split(" + ")[0]), []).append(x)
+    rows = ""
+    for gi, ((wallet, plan), runs) in enumerate(groups.items()):
+        x, n = runs[0], len(runs)
+        rows += (f'<tr class="grp"><td><a href="runs/{esc(x["run"])}/index.html">{esc(x["date"])}</a>'
+                 f'<div class=sub>latest · <a href="runs/{esc(x["run"])}/full.html">full report</a></div></td>'
+                 f'<td><button type="button" class="gtoggle" aria-expanded="false" data-group="g{gi}">'
+                 f'<span class="chev" aria-hidden="true"></span>{esc(wallet)}</button>'
+                 f'<div class=sub>{esc(plan)} · {n} run{"" if n == 1 else "s"}</div></td>{stats(x)}</tr>')
+        for x in runs:
+            rows += (f'<tr class="run" data-g="g{gi}" hidden><td><a href="runs/{esc(x["run"])}/index.html">{esc(x["date"])}</a>'
+                     f'<div class=sub>{esc(x["run"])} · <a href="runs/{esc(x["run"])}/full.html">full report</a></div></td>'
+                     f'<td><div class=sub>{esc(x["plan"])}</div></td>{stats(x)}</tr>')
     latest = f'runs/{esc(metas[0]["run"])}/index.html' if metas else "#"
-    (site / "index.html").write_text(INDEX_TEMPLATE.replace("{{ROWS}}", rows).replace("{{LATEST}}", latest).replace("{{N}}", f"{len(metas)} run{'' if len(metas) == 1 else 's'}").replace("{{REPRO}}", repro_html("Run it yourself")))
+    (site / "index.html").write_text(INDEX_TEMPLATE.replace("{{ROWS}}", rows).replace("{{LATEST}}", latest).replace("{{REPRO}}", repro_html("Run it yourself")))
     (site / ".nojekyll").write_text("")
     print("wrote", site / "index.html")
 

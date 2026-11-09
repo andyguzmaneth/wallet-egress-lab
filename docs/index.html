@@ -44,6 +44,12 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: 
 .sub { color: var(--text-muted); font-size: 12px; }
 .latest { display: inline-block; margin-top: 8px; padding: 8px 14px; border-radius: 999px; background: var(--accent); color: #fff; text-decoration: none; font-weight: 600; font-size: 14px; }
 .theme { position: absolute; top: 16px; right: 16px; font: inherit; font-size: 12px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+tr.grp td { background: var(--surface-1); }
+tr.run td:first-child { padding-left: 28px; }
+.gtoggle { font: inherit; font-weight: 600; background: none; border: 0; padding: 0; color: var(--text-primary); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.gtoggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+.chev { width: 7px; height: 7px; border-right: 2px solid var(--text-muted); border-bottom: 2px solid var(--text-muted); transform: rotate(-45deg); transition: transform .15s; }
+.gtoggle[aria-expanded="true"] .chev { transform: rotate(45deg); }
 footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
 @media (max-width: 760px) { h1 { font-size: 24px; } .kicker { padding-right: 72px; } }
 
@@ -64,7 +70,7 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
     <h2>Runs</h2>
     <div class="scroll"><table>
       <thead><tr><th>Date</th><th>Wallet and plan</th><th class=num>Length</th><th class=num>Requests</th><th class=num>Address-linked</th><th class=num>To Safe backend</th><th class=num>To Safe RPC</th><th class=num>Steps done</th></tr></thead>
-      <tbody><tr><td><a href="runs/20261106T162812Z-sepolia-1106/index.html">2026-11-06 16:28 UTC</a><div class=sub>20261106T162812Z-sepolia-1106 · <a href="runs/20261106T162812Z-sepolia-1106/full.html">full report</a></div></td><td>Safe{Wallet} web<div class=sub>Sepolia journey</div></td><td class=num>13 min</td><td class=num>1,929</td><td class=num>764<div class=sub>40%</div></td><td class=num>59%</td><td class=num>14%</td><td class=num>17/17</td></tr><tr><td><a href="runs/20261008T150313Z-sepolia/index.html">2026-10-08 15:03 UTC</a><div class=sub>20261008T150313Z-sepolia · <a href="runs/20261008T150313Z-sepolia/full.html">full report</a></div></td><td>Safe{Wallet} web<div class=sub>Sepolia journey + mainnet read-only pass</div></td><td class=num>14 min</td><td class=num>2,056</td><td class=num>859<div class=sub>42%</div></td><td class=num>52%</td><td class=num>13%</td><td class=num>17/17</td></tr><tr><td><a href="runs/20261007T175207Z-sepolia/index.html">2026-10-07 17:52 UTC</a><div class=sub>20261007T175207Z-sepolia · <a href="runs/20261007T175207Z-sepolia/full.html">full report</a></div></td><td>Safe{Wallet} web<div class=sub>Sepolia journey</div></td><td class=num>13 min</td><td class=num>1,849</td><td class=num>751<div class=sub>41%</div></td><td class=num>52%</td><td class=num>12%</td><td class=num>14/17</td></tr><tr><td><a href="runs/20261007T172837Z-sepolia/index.html">2026-10-07 17:28 UTC</a><div class=sub>20261007T172837Z-sepolia · <a href="runs/20261007T172837Z-sepolia/full.html">full report</a></div></td><td>Safe{Wallet} web<div class=sub>Sepolia journey</div></td><td class=num>15 min</td><td class=num>1,924</td><td class=num>786<div class=sub>41%</div></td><td class=num>52%</td><td class=num>13%</td><td class=num>14/17</td></tr></tbody>
+      <tbody><tr class="grp"><td><a href="runs/20261106T162812Z-sepolia-1106/index.html">2026-11-06 16:28 UTC</a><div class=sub>latest · <a href="runs/20261106T162812Z-sepolia-1106/full.html">full report</a></div></td><td><button type="button" class="gtoggle" aria-expanded="false" data-group="g0"><span class="chev" aria-hidden="true"></span>Safe{Wallet} web</button><div class=sub>Sepolia journey · 4 runs</div></td><td class=num>13 min</td><td class=num>1,929</td><td class=num>764<div class=sub>40%</div></td><td class=num>59%</td><td class=num>14%</td><td class=num>17/17</td></tr><tr class="run" data-g="g0" hidden><td><a href="runs/20261106T162812Z-sepolia-1106/index.html">2026-11-06 16:28 UTC</a><div class=sub>20261106T162812Z-sepolia-1106 · <a href="runs/20261106T162812Z-sepolia-1106/full.html">full report</a></div></td><td><div class=sub>Sepolia journey</div></td><td class=num>13 min</td><td class=num>1,929</td><td class=num>764<div class=sub>40%</div></td><td class=num>59%</td><td class=num>14%</td><td class=num>17/17</td></tr><tr class="run" data-g="g0" hidden><td><a href="runs/20261008T150313Z-sepolia/index.html">2026-10-08 15:03 UTC</a><div class=sub>20261008T150313Z-sepolia · <a href="runs/20261008T150313Z-sepolia/full.html">full report</a></div></td><td><div class=sub>Sepolia journey + mainnet read-only pass</div></td><td class=num>14 min</td><td class=num>2,056</td><td class=num>859<div class=sub>42%</div></td><td class=num>52%</td><td class=num>13%</td><td class=num>17/17</td></tr><tr class="run" data-g="g0" hidden><td><a href="runs/20261007T175207Z-sepolia/index.html">2026-10-07 17:52 UTC</a><div class=sub>20261007T175207Z-sepolia · <a href="runs/20261007T175207Z-sepolia/full.html">full report</a></div></td><td><div class=sub>Sepolia journey</div></td><td class=num>13 min</td><td class=num>1,849</td><td class=num>751<div class=sub>41%</div></td><td class=num>52%</td><td class=num>12%</td><td class=num>14/17</td></tr><tr class="run" data-g="g0" hidden><td><a href="runs/20261007T172837Z-sepolia/index.html">2026-10-07 17:28 UTC</a><div class=sub>20261007T172837Z-sepolia · <a href="runs/20261007T172837Z-sepolia/full.html">full report</a></div></td><td><div class=sub>Sepolia journey</div></td><td class=num>15 min</td><td class=num>1,924</td><td class=num>786<div class=sub>41%</div></td><td class=num>52%</td><td class=num>13%</td><td class=num>14/17</td></tr></tbody>
     </table></div>
   </section>
   <section id="reproduce">
@@ -77,6 +83,13 @@ scripts/run.sh sepolia     # setup, keys and the full command list are in the RE
 </section>
 </main>
 <script>
+document.querySelectorAll(".gtoggle").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var open = b.getAttribute("aria-expanded") !== "true";
+    b.setAttribute("aria-expanded", open);
+    document.querySelectorAll('tr.run[data-g="' + b.dataset.group + '"]').forEach(function (r) { r.hidden = !open; });
+  });
+});
 (function () {
   var root = document.documentElement, btn = document.getElementById("theme");
   try { var saved = localStorage.getItem("theme"); if (saved) root.setAttribute("data-theme", saved); } catch (e) {}

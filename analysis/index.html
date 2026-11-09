@@ -44,6 +44,12 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: 
 .sub { color: var(--text-muted); font-size: 12px; }
 .latest { display: inline-block; margin-top: 8px; padding: 8px 14px; border-radius: 999px; background: var(--accent); color: #fff; text-decoration: none; font-weight: 600; font-size: 14px; }
 .theme { position: absolute; top: 16px; right: 16px; font: inherit; font-size: 12px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+tr.grp td { background: var(--surface-1); }
+tr.run td:first-child { padding-left: 28px; }
+.gtoggle { font: inherit; font-weight: 600; background: none; border: 0; padding: 0; color: var(--text-primary); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.gtoggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+.chev { width: 7px; height: 7px; border-right: 2px solid var(--text-muted); border-bottom: 2px solid var(--text-muted); transform: rotate(-45deg); transition: transform .15s; }
+.gtoggle[aria-expanded="true"] .chev { transform: rotate(45deg); }
 footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
 @media (max-width: 760px) { h1 { font-size: 24px; } .kicker { padding-right: 72px; } }
 
@@ -70,6 +76,13 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
   {{REPRO}}
 </main>
 <script>
+document.querySelectorAll(".gtoggle").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var open = b.getAttribute("aria-expanded") !== "true";
+    b.setAttribute("aria-expanded", open);
+    document.querySelectorAll('tr.run[data-g="' + b.dataset.group + '"]').forEach(function (r) { r.hidden = !open; });
+  });
+});
 (function () {
   var root = document.documentElement, btn = document.getElementById("theme");
   try { var saved = localStorage.getItem("theme"); if (saved) root.setAttribute("data-theme", saved); } catch (e) {}
