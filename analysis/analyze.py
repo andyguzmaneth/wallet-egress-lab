@@ -32,11 +32,28 @@ OPERATORS = [
     ("sequence.info", "Sequence"),
     ("dm8wquhbuh2eq.cloudfront.net", "Sequence"),
     ("publicnode.com", "Custom RPC (user-set)"),
+    ("127.0.0.1", "Custom RPC (user-set)"),  # own node over a local tunnel
 ]
+# MetaMask runs only (state.wallet == "MetaMask"). Checked before OPERATORS, so a Safe run is unchanged.
+MM_OPERATORS = [
+    ("metamask.io", "MetaMask (Consensys)"),
+    ("metamask.github.io", "MetaMask (Consensys)"),
+    ("infura.io", "Infura (Consensys)"),
+    ("segment.io", "Segment"),
+    ("hyperliquid.xyz", "Hyperliquid"),
+    ("contentful.com", "Contentful"),
+    ("4byte.directory", "4byte.directory"),
+    ("chainid.network", "chainid.network"),
+    ("sevenseas.capital", "Seven Seas"),
+    ("googleapis.com", "Google (Firebase)"),
+    ("publicnode.com", "Custom RPC (user-set)"),
+    ("alchemy.com", "Alchemy"),
+]
+NON_EVM_RPC = ("bitcoin-mainnet.infura.io", "solana-mainnet.infura.io", "tron-mainnet.infura.io", "stellar-mainnet.infura.io")
 
 
-def operator(host: str) -> str:
-    for suffix, name in OPERATORS:
+def operator(host: str, mm: bool = False) -> str:
+    for suffix, name in (MM_OPERATORS + OPERATORS if mm else OPERATORS):
         if host == suffix or host.endswith("." + suffix):
             return name
     return host
@@ -71,6 +88,13 @@ CATS = {
     "Feature flags": "telemetry",
     "Bot challenge": "challenge",
     "IP geolocation": "challenge",
+    # MetaMask
+    "Account sync & sign-in": "backend_read",
+    "Notifications": "backend_read",
+    "Site screening": "backend_read",
+    "Prices, tokens & gas": "rpc_public",
+    "Tx decoding": "rpc_public",
+    "Non-EVM chain reads": "rpc_read",
 }
 
 SANCTIONS_ORACLE = "0x40c57923924b5c5c5455c48d93317139addac8fb"
@@ -112,10 +136,59 @@ def rpc_items(rec: dict) -> list:
 STATIC_RE = re.compile(r"\.(js|mjs|css|svg|png|webp|jpe?g|gif|woff2?|ttf|ico|webmanifest|mp4|html)$")
 
 
-def category(rec: dict) -> str:
+def mm_category(rec: dict):
+    """MetaMask's own services; None falls through to the shared rules."""
+    host, method = rec["host"], rec["method"]
+    path = urlparse(rec["url"]).path
+    sub = host.split(".")[0]
+    if host in NON_EVM_RPC:
+        return "Non-EVM chain reads"
+    if host.endswith(("infura.io", "publicnode.com", "alchemy.com")):
+        if method == "OPTIONS":
+            return "RPC: chain status"
+        cats = {rpc_item_category(i) for i in rpc_items(rec)}
+        return next((c for c in RPC_PRIORITY if c in cats), "RPC: chain status")
+    if host == "api.segment.io":
+        return "Analytics"
+    if host.endswith("googleapis.com") or sub in ("notification", "trigger", "push"):
+        return "Notifications"
+    if host == "api.hyperliquid.xyz" or host == "api.sevenseas.capital":
+        return "Account state"
+    if host == "www.4byte.directory":
+        return "Tx decoding"
+    if host in ("cdn.contentful.com", "chainid.network"):
+        return "Config & metadata"
+    if not host.endswith("metamask.io"):
+        return None
+    if sub.startswith("tx-sentinel"):
+        return "Tx preview & simulation" if method == "POST" else "Config & metadata"
+    if sub == "security-alerts":
+        return "Tx security scan"
+    if sub in ("dapp-scanning",):
+        return "Site screening"
+    if sub in ("phishing-detection", "client-side-detection", "acl"):
+        return "Config & metadata"
+    if sub == "client-config":
+        return "Feature flags"
+    if sub in ("user-storage", "authentication", "oidc", "subscription"):
+        return "Account sync & sign-in"
+    if sub in ("accounts", "nft", "defiadapters", "rewards"):
+        return "Account state" if re.search(r"0x[0-9a-fA-F]{40}|multiaccount|/users/", rec["url"]) or method == "POST" else "Config & metadata"
+    if sub in ("gas", "price", "token", "tokens", "static"):
+        return "App code & assets" if sub == "static" else "Prices, tokens & gas"
+    if sub in ("geolocation",) or path == "/geolocation":
+        return "IP geolocation"
+    if sub == "npm-ota":
+        return "App code & assets"
+    return "Config & metadata"
+
+
+def category(rec: dict, mm: bool = False) -> str:
     host, url, method = rec["host"], rec["url"], rec["method"]
     path = urlparse(url).path
-    op = operator(host)
+    if mm and (c := mm_category(rec)):
+        return c
+    op = operator(host, mm)
     if op == "Google Analytics":
         return "Analytics" if "collect" in path else "App code & assets"
     if op == "Sentry":
@@ -210,18 +283,33 @@ def identifiers(rec: dict, known: dict) -> list:
         found.append("Client ID")
     if header(rec, "cookie"):
         found.append("Cookie")
+    # MetaMask profile: a bearer token from the sign-in that backup and sync performs, or the
+    # phrase-derived identifier that sign-in starts from. Either ties requests to one user.
+    auth = header(rec, "authorization") or ""
+    if rec["host"].endswith("metamask.io") and (auth.lower().startswith("bearer ") or "identifier=0x" in rec["url"]):
+        found.append("Profile ID")
     return sorted(set(found))
 
 
 def tier(cat: str, ids: list) -> int:
-    addr = any(i in ids for i in ("Safe address", "Owner address", "Counterparty"))
+    addr = any(i in ids for i in ("Safe address", "Owner address", "Counterparty", "Account address", "Non-EVM address"))
     if cat in INTENT_CATS or "Tx hash / order id" in ids or ("Counterparty" in ids and addr and cat != "Account state"):
         return 3
     if addr:
         return 2
-    if cat in TELEMETRY_CATS or "Client ID" in ids:
+    if cat in TELEMETRY_CATS or "Client ID" in ids or "Profile ID" in ids:
         return 1
     return 0
+
+
+def party(rec: dict) -> str:
+    """MetaMask runs: "dapp" for requests a web page sent (Origin or Referer is an http(s) site other than
+    MetaMask's own phishing-warning page), "wallet" for the extension, its service worker and its snaps
+    (chrome-extension:// origin, "null" from sandboxed snap frames, or none)."""
+    src = header(rec, "origin") or header(rec, "referer") or ""
+    if src.startswith("http") and not urlparse(src).hostname.endswith("metamask.github.io"):
+        return "dapp"
+    return "wallet"
 
 
 def load_jsonl(p: Path) -> list:
@@ -236,12 +324,20 @@ def analyze(run: Path, baseline_hosts: set) -> dict:
     signer = load_jsonl(run / "signer.jsonl")
     state = json.loads((run / "state.json").read_text()) if (run / "state.json").exists() else {}
 
+    mm = state.get("wallet") == "MetaMask"
     owners = state.get("owners", {})
     known = {
         "Safe address": [state.get("safe", "")] if state.get("safe") else [],
         "Owner address": [owners.get("A", ""), owners.get("B", "")],
         "Counterparty": [owners.get("R", "")],
     }
+    if mm:
+        # MetaMask: accounts A and B, contact R, and the non-EVM addresses derived from the phrase
+        # (driver/mm-derive.ts writes them to derived.json; they are not read from the capture).
+        acc = state.get("accounts", {})
+        derived = json.loads((run / "derived.json").read_text()) if (run / "derived.json").exists() else {}
+        known = {"Account address": [acc.get("A", ""), acc.get("B", "")], "Counterparty": [acc.get("R", "")],
+                 "Non-EVM address": list(derived.values())}
     # Tx hashes and order ids that the run produced: safeTxHash from proposals, tx hashes from the signer.
     txids = set()
     for r in flows:
@@ -252,6 +348,10 @@ def analyze(run: Path, baseline_hosts: set) -> dict:
             uid = (r["resp_body"].get("text") or "").strip('"')
             if uid.startswith("0x"):
                 txids.add(uid)
+    if mm:
+        # Hashes of the run's own transactions (the funding transfer predates the run and is left out).
+        txids |= {t["hash"] for t in state.get("txs", []) if t.get("from", "").lower() in
+                  {v.lower() for v in known["Account address"] + known["Counterparty"]}}
     known["Tx hash / order id"] = sorted(txids)
     known = {k: [v for v in vs if v] for k, vs in known.items()}
 
@@ -278,9 +378,10 @@ def analyze(run: Path, baseline_hosts: set) -> dict:
         if r["host"] in baseline_hosts:
             browser_noise[r["host"]] += 1
             continue
-        cat = category(r)
+        cat = category(r, mm)
         ids = identifiers(r, known)
-        items = rpc_items(r) if (r["host"].startswith("rpc.") or r["host"].endswith(("batch.exchange", "publicnode.com"))) else []
+        items = rpc_items(r) if (r["host"].startswith("rpc.") or r["host"].endswith(("batch.exchange", "publicnode.com")) or r["host"] == "127.0.0.1"
+                                  or (mm and r["host"].endswith(("infura.io", "alchemy.com")) and r["host"] not in NON_EVM_RPC)) else []
         t_end = r["t_end"] or r["t_start"]
         out.append({
             "t": r["t_start"],
@@ -288,7 +389,7 @@ def analyze(run: Path, baseline_hosts: set) -> dict:
             "method": r["method"],
             "host": r["host"],
             "path": re.sub(r"0x[0-9a-fA-F]{40,}", "0x…", urlparse(r["url"]).path)[:120],
-            "operator": operator(r["host"]),
+            "operator": operator(r["host"], mm),
             "category": cat,
             "rpc_methods": [i.get("method") for i in items],
             "ids": ids,
@@ -300,10 +401,12 @@ def analyze(run: Path, baseline_hosts: set) -> dict:
             "down": r["resp_wire_bytes"],
             "preflight": r["method"] == "OPTIONS",
             "fid": r["id"],
+            **({"party": party(r)} if mm else {}),
         })
 
     return {
         "run": run.name,
+        "wallet": state.get("wallet", "Safe{Wallet}"),
         "plan": state.get("plan"),
         "cookies": state.get("cookies"),
         "safe": state.get("safe"),
