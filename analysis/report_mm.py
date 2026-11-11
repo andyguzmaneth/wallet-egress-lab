@@ -1,7 +1,11 @@
 """Render the MetaMask run as one local report page, comparable with the Safe report.
 
 Usage: python3 -I analysis/report_mm.py --run runs/<mm-run> --baseline runs/<mm-baseline-run> \\
-           [--safe runs/<safe-sepolia-run>] --out <file.html>
+           [--safe runs/<safe-sepolia-run>] (--out <file.html> | --site docs) [--reviewed]
+
+--site writes docs/runs/<run>/index.html, full.html and meta.json and rebuilds the run index, where runs
+are grouped by wallet. Without --reviewed the page and its index row are marked as a draft that the
+author has not reviewed.
 
 Reuses report.py's helpers and the page styling and script of template.html, so a Safe run renders
 exactly as before. The headline counts only requests MetaMask itself sent (the extension, its service
@@ -169,7 +173,9 @@ def main():
     ap.add_argument("--run", required=True)
     ap.add_argument("--baseline", required=True, help="the MetaMask extension-only baseline run")
     ap.add_argument("--safe", help="the Safe sepolia run, for the comparison table")
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--out", help="write one report file")
+    ap.add_argument("--site", help="site root (docs): writes runs/<run>/ and rebuilds the run index")
+    ap.add_argument("--reviewed", action="store_true", help="the author has reviewed the page: drop the draft marking")
     args = ap.parse_args()
     a = json.loads((Path(args.run) / "analysis.json").read_text())
     base = json.loads((Path(args.baseline) / "analysis.json").read_text())
@@ -300,6 +306,11 @@ def main():
         "NSTEPS": str(len(a["windows"])), "DUR": f"{dur_min:.0f}", "REPO": R.REPO,
         "FAILS": ("All " + str(len(a["steps"])) + " steps completed." if not fails else "Steps that failed: " + ", ".join(esc(s_["name"]) for s_ in fails) + "."),
         "NDAPP": num(len(dapp)), "NREQ": num(len(reqs)),
+        "BACKLINK": '<a class="back" href="../../index.html">All runs</a> · ' if args.site else "",
+        "DRAFT": "" if args.reviewed else (
+            '<div class="insight" style="border-left-color:#b45309"><div class="eyebrow" style="color:#b45309">Draft, not reviewed</div>'
+            "<p>This page was generated with AI assistance from the run data and has not yet been reviewed by the author. "
+            "Figures and wording may change.</p></div>"),
     }
 
     tpl = R.TEMPLATE
@@ -313,9 +324,26 @@ def main():
     left = sorted(set(re.findall(r"\{\{[A-Z_]+\}\}", page)))
     if left:
         raise SystemExit(f"unfilled placeholders: {left}")
-    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.out).write_text(page)
-    print("wrote", args.out)
+    full = re.sub(r'(class="apx-body" id="[^"]+") hidden', r"\1", page).replace(
+        'class="apx-toggle" aria-expanded="false"', 'class="apx-toggle" aria-expanded="true"')
+    out = Path(args.out) if args.out else Path(args.site) / "runs" / a["run"] / "index.html"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(page)
+    (out.parent / "full.html").write_text(full)   # same page with the appendix open
+    print("wrote", out, "and", out.parent / "full.html")
+    if args.site:
+        meta = {
+            "run": a["run"], "date": time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(a["t0"])),
+            "wallet": f"MetaMask extension {state.get('version', '')}".strip(), "plan": "Sepolia journey",
+            "minutes": round(dur_min), "requests": len(reqs), "linked": len(sens), "linked_pct": pct(len(sens), len(reqs)),
+            "steps_ok": sum(1 for s_ in a["steps"] if s_["ok"]), "steps": len(a["steps"]),
+            # Index columns "To wallet backend" and "To default RPC": the MetaMask API and Infura here.
+            "backend_pct": pct(sum(1 for r in sens if r["operator"] == "MetaMask (Consensys)"), len(sens)),
+            "rpc_pct": pct(sum(1 for r in sens if r["operator"] == "Infura (Consensys)"), len(sens)),
+            "status": "reviewed" if args.reviewed else "draft",
+        }
+        (out.parent / "meta.json").write_text(json.dumps(meta, indent=2))
+        R.build_index(Path(args.site))
 
 
 if __name__ == "__main__":

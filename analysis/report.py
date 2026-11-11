@@ -784,19 +784,21 @@ def build_index(site: Path):
     groups: dict = {}
     for x in metas:  # newest first, so each group's first run is its latest
         groups.setdefault((x["wallet"], x["plan"].split(" + ")[0]), []).append(x)
+    draft = lambda x: ' <span class="draft" title="Generated with AI assistance; not yet reviewed by the author">Draft, not reviewed</span>' if x.get("status") == "draft" else ""
     rows = ""
     for gi, ((wallet, plan), runs) in enumerate(groups.items()):
         x, n = runs[0], len(runs)
         rows += (f'<tr class="grp"><td><a href="runs/{esc(x["run"])}/index.html">{esc(x["date"])}</a>'
                  f'<div class=sub>latest · <a href="runs/{esc(x["run"])}/full.html">full report</a></div></td>'
                  f'<td><button type="button" class="gtoggle" aria-expanded="false" data-group="g{gi}">'
-                 f'<span class="chev" aria-hidden="true"></span>{esc(wallet)}</button>'
+                 f'<span class="chev" aria-hidden="true"></span>{esc(wallet)}</button>{draft(x)}'
                  f'<div class=sub>{esc(plan)} · {n} run{"" if n == 1 else "s"}</div></td>{stats(x)}</tr>')
         for x in runs:
             rows += (f'<tr class="run" data-g="g{gi}" hidden><td><a href="runs/{esc(x["run"])}/index.html">{esc(x["date"])}</a>'
                      f'<div class=sub>{esc(x["run"])} · <a href="runs/{esc(x["run"])}/full.html">full report</a></div></td>'
-                     f'<td><div class=sub>{esc(x["plan"])}</div></td>{stats(x)}</tr>')
-    latest = f'runs/{esc(metas[0]["run"])}/index.html' if metas else "#"
+                     f'<td><div class=sub>{esc(x["plan"])}</div>{draft(x)}</td>{stats(x)}</tr>')
+    reviewed = [x for x in metas if x.get("status") != "draft"]   # the front-page button opens a reviewed report
+    latest = f'runs/{esc(reviewed[0]["run"])}/index.html' if reviewed else "#"
     (site / "index.html").write_text(INDEX_TEMPLATE.replace("{{ROWS}}", rows).replace("{{LATEST}}", latest).replace("{{REPRO}}", repro_html("Run it yourself")))
     (site / ".nojekyll").write_text("")
     print("wrote", site / "index.html")

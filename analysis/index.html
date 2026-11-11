@@ -45,6 +45,7 @@ td { padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: 
 .latest { display: inline-block; margin-top: 8px; padding: 8px 14px; border-radius: 999px; background: var(--accent); color: #fff; text-decoration: none; font-weight: 600; font-size: 14px; }
 .theme { position: absolute; top: 16px; right: 16px; font: inherit; font-size: 12px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
 tr.grp td { background: var(--surface-1); }
+.draft { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 600; border: 1px solid #b45309; color: #b45309; border-radius: 4px; padding: 0 5px; }
 tr.run td:first-child { padding-left: 28px; }
 .gtoggle { font: inherit; font-weight: 600; background: none; border: 0; padding: 0; color: var(--text-primary); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
 .gtoggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
@@ -64,12 +65,12 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
 <main>
   <div class="kicker">wallet-egress-lab</div>
   <h1>Wallet Egress Inventory</h1>
-  <p>Each run plays a scripted user through a web wallet behind a recording proxy, then classifies every request by who receives it and what it reveals: address-free, telemetry, address-linked, or intent before chain. Each report ends with a routing plan: which calls stay on the plain path, which need the origin hidden (OHTTP relay or anon-RPC), and which need the content hidden (PIR).</p>
+  <p>Each run plays a scripted user through a wallet (a web app or a browser extension) behind a recording proxy, then classifies every request by who receives it and what it reveals: address-free, telemetry, address-linked, or intent before chain. The Safe reports end with a routing plan: which calls stay on the plain path, which need the origin hidden (OHTTP relay or anon-RPC), and which need the content hidden (PIR).</p>
   <a class="latest" href="{{LATEST}}">Open the latest report</a>
   <section>
     <h2>Runs</h2>
     <div class="scroll"><table>
-      <thead><tr><th>Date</th><th>Wallet and plan</th><th class=num>Length</th><th class=num>Requests</th><th class=num>Address-linked</th><th class=num>To Safe backend</th><th class=num>To Safe RPC</th><th class=num>Steps done</th></tr></thead>
+      <thead><tr><th>Date</th><th>Wallet and plan</th><th class=num>Length</th><th class=num>Requests</th><th class=num>Address-linked</th><th class=num>To wallet backend</th><th class=num>To default RPC</th><th class=num>Steps done</th></tr></thead>
       <tbody>{{ROWS}}</tbody>
     </table></div>
   </section>

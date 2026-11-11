@@ -1,0 +1,15 @@
+{
+  "run": "20261110T151949Z-mm-sepolia-7",
+  "date": "2026-11-10 15:19 UTC",
+  "wallet": "MetaMask extension 13.56.0",
+  "plan": "Sepolia journey",
+  "minutes": 12,
+  "requests": 761,
+  "linked": 309,
+  "linked_pct": "41%",
+  "steps_ok": 16,
+  "steps": 16,
+  "backend_pct": "27%",
+  "rpc_pct": "67%",
+  "status": "draft"
+}
