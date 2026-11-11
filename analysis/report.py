@@ -112,7 +112,20 @@ def op_bucket(o):
     return o if o in OPERATOR_ORDER else "Other"
 
 
-def svg_timeline(a) -> str:
+def safe_notes(reqs, win):
+    """Timeline annotations for a Safe run: (step, text) pairs."""
+    out = [("create_safe", f"Create Safe: {num(sum(1 for r in reqs if r['step'] == 'create_safe'))} requests"),
+           ("swap_quote", f"Swap opens: {num(sum(1 for r in reqs if r['step'] == 'swap_quote' and r['operator'] == 'CoW Protocol'))} CoW requests")]
+    g = idle_gap(reqs, win.get("idle_home"))
+    if g:
+        out.append(("idle_home", f"Idle: Safe address every {g:.0f} s"))
+    n_saferpc = sum(1 for r in reqs if r["step"].startswith("custom_rpc") and r["host"] == "rpc.safe.global")
+    if n_saferpc:
+        out.append(("custom_rpc_set", f"Custom RPC set: Safe RPC still called {n_saferpc}×"))
+    return out
+
+
+def svg_timeline(a, notes_for=safe_notes) -> str:
     reqs = [r for r in a["requests"] if not r["preflight"]]
     t0 = a["t0"]
     tmax = max(r["t"] for r in reqs) - t0
@@ -155,16 +168,8 @@ def svg_timeline(a) -> str:
         if step in win:
             w = win[step]
             notes.append((x((w["t0"] + w["t1"]) / 2 - t0), text, (w["t0"] + w["t1"]) / 2 - t0))
-    n_create = sum(1 for r in reqs if r["step"] == "create_safe")
-    at("create_safe", f"Create Safe: {num(n_create)} requests")
-    n_cow = sum(1 for r in reqs if r["step"] == "swap_quote" and r["operator"] == "CoW Protocol")
-    at("swap_quote", f"Swap opens: {num(n_cow)} CoW requests")
-    g = idle_gap(reqs, win.get("idle_home"))
-    if g:
-        at("idle_home", f"Idle: Safe address every {g:.0f} s")
-    n_saferpc = sum(1 for r in reqs if r["step"].startswith("custom_rpc") and r["host"] == "rpc.safe.global")
-    if n_saferpc:
-        at("custom_rpc_set", f"Custom RPC set: Safe RPC still called {n_saferpc}×")
+    for step, text in notes_for(reqs, win):
+        at(step, text)
     right = [-999.0, -999.0, -999.0]   # right edge of the last note in each row
     for nx, text, nt in sorted(notes):
         wtxt = len(text) * 6.8

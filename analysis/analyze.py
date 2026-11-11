@@ -279,7 +279,7 @@ def identifiers(rec: dict, known: dict) -> list:
     q = parse_qs(urlparse(rec["url"]).query)
     if "cid" in q and operator(rec["host"]) == "Google Analytics":
         found.append("Client ID")
-    if '"client_id":"did:key' in hay:
+    if '"client_id":"did:key' in hay or '"metametrics_id":"0x' in hay:   # MetaMask sends it with usage data declined
         found.append("Client ID")
     if header(rec, "cookie"):
         found.append("Cookie")

@@ -1,0 +1,103 @@
+<body>
+<button class="theme" type="button" id="theme">Theme</button>
+<nav class="rail" aria-label="Sections"><ul><li><a href="#picture" data-rail="picture"><span class="tick"></span><span class="label">The picture</span></a></li><li><a href="#findings" data-rail="findings"><span class="tick"></span><span class="label">Findings</span></a></li><li><a href="#defaults" data-rail="defaults"><span class="tick"></span><span class="label">Defaults</span></a></li><li><a href="#compare" data-rail="compare"><span class="tick"></span><span class="label">Safe and MetaMask</span></a></li><li><a href="#session" data-rail="session"><span class="tick"></span><span class="label">Session timeline</span></a></li><li><a href="#appendix" data-rail="appendix"><span class="tick"></span><span class="label">Appendix</span></a></li></ul></nav>
+<main>
+<header>
+  <div class="kicker">MetaMask extension {{VERSION}} · Chromium · Sepolia · {{DATE}}</div>
+  <h1>MetaMask Egress Report</h1>
+  <div class="insight"><div class="eyebrow">Summary</div>
+  <ul class="thesis">{{THESIS}}</ul></div>
+  <p class="methodline">One scripted user with a fresh recovery phrase, {{NSTEPS}} actions on Sepolia, {{DUR}} minutes, every request recorded at a proxy, defaults left as shipped except usage data declined. {{NREQ}} requests came from MetaMask; the {{NDAPP}} requests from the swap page are counted apart. <a href="#apx-method">Method</a></p>
+</header>
+
+<section id="picture">
+  <div class="eyebrow">The picture</div>
+  <h2>{{PICT_T}}</h2>
+  {{LEGEND_DESC}}
+  <div class="unitwrap scroll">{{UNITS}}</div>
+  <p class="sub hint">One square per request MetaMask sent. MetaMask API is Consensys's backend (accounts, profile and sync, notifications, prices, simulation and security scans). Infura is the default RPC for every preset network, and also serves the Bitcoin, Solana, Tron and Stellar accounts. User's own RPC is the Sepolia node set in the last steps. Select a group to see what it contains.</p>
+  {{BREAKDOWN}}
+</section>
+
+<style>.findings{max-width:760px;padding-left:20px}.findings li{margin:0 0 12px;line-height:1.5}</style>
+<section id="findings">
+  <div class="eyebrow">Findings</div>
+  <h2>What leaves the extension by default</h2>
+  <ol class="findings">{{FINDINGS}}</ol>
+</section>
+
+<section id="defaults">
+  <div class="eyebrow">Defaults</div>
+  <h2>Privacy settings a new user gets</h2>
+  <div class="scroll"><table class="mini">
+    <thead><tr><th>Where</th><th>Setting</th><th>Default</th><th>Note</th></tr></thead>
+    <tbody>{{DEFAULTS}}</tbody>
+  </table></div>
+  <p class="sub">Seen in the onboarding screens and the settings of the pinned build. The run changed only two of them: it declined usage data and turned on test networks.</p>
+</section>
+
+<section id="compare">
+  <div class="eyebrow">Safe and MetaMask</div>
+  <h2>The same user goals in two wallets</h2>
+  {{COMPARE}}
+  <h3>The swap page is a separate party</h3>
+  {{DAPP}}
+</section>
+
+<section id="session">
+  <div class="eyebrow">Session timeline</div>
+  <h2>{{SESSION_T}}</h2>
+  <div class="tlbox" id="tlbox">
+    <div class="tlbar">
+      {{LEGEND}}
+      <div class="zoom" role="group" aria-label="Zoom the timeline">
+        <button type="button" data-zoom="-1" aria-label="Zoom out">−</button>
+        <span id="zlvl">100%</span>
+        <button type="button" data-zoom="1" aria-label="Zoom in">+</button>
+        <button type="button" id="tlfull" aria-pressed="false">Full screen</button>
+      </div>
+    </div>
+    <div class="scroll" id="tlscroll">{{TIMELINE}}</div>
+    <ul class="stepkey">{{STEPKEY}}</ul>
+  </div>
+</section>
+
+<section id="appendix">
+  <div class="eyebrow">Appendix</div>
+  <h2>Evidence and method</h2>
+  <div class="apx-item" id="apx-who"><h3><button type="button" class="apx-toggle" aria-expanded="false" aria-controls="apx-who-b">Who learns what</button></h3><div class="apx-body" id="apx-who-b" hidden>
+  <div class="scroll"><table>
+    <thead><tr><th>Receiver</th><th class=num>All requests</th><th class=num>Account address</th><th class=num>Non-EVM address</th><th class=num>Counterparty</th><th class=num>Tx hash / order id</th><th class=num>Client ID</th><th class=num>Profile ID</th><th class=num>Intent</th></tr></thead>
+    <tbody>{{MATRIX}}</tbody>
+  </table></div>
+  </div></div>
+  <div class="apx-item" id="apx-actions"><h3><button type="button" class="apx-toggle" aria-expanded="false" aria-controls="apx-actions-b">Requests per user action</button></h3><div class="apx-body" id="apx-actions-b" hidden>
+  {{LEGEND}}
+  <div class="scroll">{{STEPS}}</div>
+  </div></div>
+  <div class="apx-item" id="apx-inv"><h3><button type="button" class="apx-toggle" aria-expanded="false" aria-controls="apx-inv-b">Endpoint inventory</button></h3><div class="apx-body" id="apx-inv-b" hidden>
+  <div class="chips" id="chips">
+    <button type="button" aria-pressed="true" data-t="all">All</button>
+    <button type="button" aria-pressed="false" data-t="3">Tx details</button>
+    <button type="button" aria-pressed="false" data-t="2">Address-linked</button>
+    <button type="button" aria-pressed="false" data-t="1">Telemetry</button>
+    <button type="button" aria-pressed="false" data-t="0">Address-free</button>
+  </div>
+  <div class="scroll"><table id="inv">
+    <thead><tr><th class=sortable>Operator</th><th class=sortable>Service</th><th class="num sortable">Requests</th><th class=sortable>Tier</th><th>Identifiers</th><th class="num sortable">p50 ms</th><th class="num sortable">Up</th></tr></thead>
+    <tbody>{{INV}}</tbody>
+  </table></div>
+  <button class="more" type="button" id="more">Show all rows</button>
+  </div></div>
+  <div class="apx-item" id="apx-method"><h3><button type="button" class="apx-toggle" aria-expanded="false" aria-controls="apx-method-b">Method and tiers</button></h3><div class="apx-body" id="apx-method-b" hidden>
+  <p>The MetaMask Chrome build {{VERSION}} came from the MetaMask GitHub releases, checked against the release's SHA256SUMS and its Sigstore provenance. Chromium (Playwright, persistent profile, QUIC off) loaded it unpacked and ran behind mitmproxy, so every request from the extension pages, its service worker, its snaps and the swap page was recorded with headers and bodies. A blank-browser baseline removed Chromium's own traffic by host. {{BASELINE}}</p>
+  <p>Requests are attributed by their Origin or Referer header: an http(s) site is the dapp page; a chrome-extension:// origin, the "null" origin of MetaMask's sandboxed snaps, or none is MetaMask. Identifiers were found by searching URLs, headers and bodies for accounts A and B, contact R, the hashes of the run's transactions, and the Bitcoin, Solana, Tron and Stellar addresses (and Bitcoin script hashes) derived from the phrase with standard paths. All eight derived addresses appear in the capture. Each request gets the highest tier whose rule it matches:</p>
+  <ol class="tierhelp">{{TIERHELP}}</ol>
+  <p>Checks: analysis/verify_mm.py recounts the request and address-linked totals from the raw capture and matches the analysis exactly; ten address-linked requests were read raw and each carries the value, and ten address-free ones carry none. Shares are of requests, not bytes. {{FAILS}}</p>
+  <p>Limits: one scripted run, fresh profile, Sepolia only. The multisig steps of the Safe journey have no MetaMask equivalent and were not run. MetaMask Swaps has no test networks, so the swap went through the CoW Swap page. Payload contents that MetaMask encrypts before upload (backup and sync data) were not decrypted.</p>
+  <p>Setup and the full command list: <a href="{{REPO}}">repository README</a>.</p>
+  </div></div>
+</section>
+
+<footer>Generated by wallet-egress-lab from run {{RUN}}.</footer>
+</main>

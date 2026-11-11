@@ -113,3 +113,14 @@ MM=1 ONBOARD=1 ./bin-lab.sh start runs/explore-mm      # exploration session on 
   `steps.jsonl` records the failure.
 - The browser's own Google traffic (component updates, GCM) is removed with the
   baseline run.
+
+### MetaMask analysis and report
+
+```sh
+npx tsx driver/mm-derive.ts > runs/<mm-run>/derived.json          # non-EVM addresses from the run's phrase
+python3 -I analysis/analyze.py runs/<mm-run> --baseline runs/20261106T162507Z-baseline-1106
+python3 -I analysis/verify_mm.py runs/<mm-run> runs/20261106T162507Z-baseline-1106
+python3 -I analysis/report_mm.py --run runs/<mm-run> --baseline runs/<mm-baseline-run> --safe runs/<safe-sepolia-run> --out runs/<mm-run>/report.html
+```
+
+Only the blank-browser baseline is subtracted. The extension-only baseline shares hosts with the journey, so the report states it as its own figure. Requests are split by Origin or Referer into MetaMask's own (extension, service worker, snaps) and the dapp page's; the headline counts MetaMask's only.
