@@ -1,0 +1,15 @@
+{
+  "run": "20261117T131301Z-wc-sepolia",
+  "date": "2026-11-17 13:13 UTC",
+  "wallet": "WalletChan extension 4.2.0",
+  "plan": "Sepolia journey",
+  "minutes": 20,
+  "requests": 1041,
+  "linked": 891,
+  "linked_pct": "86%",
+  "steps_ok": 22,
+  "steps": 22,
+  "backend_pct": "6%",
+  "rpc_pct": "86%",
+  "status": "draft"
+}

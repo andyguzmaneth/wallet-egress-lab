@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>WalletChan Egress Report</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-0: #f6f5f2; --surface-1: #fcfcfb; --border: #e3e2dd;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7a7974; --accent: #2a78d6; --warn: #b45309;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-0: #121211; --surface-1: #1a1a19; --border: #2e2e2c;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86; --accent: #3987e5; --warn: #e08a3c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #121211; --surface-1: #1a1a19; --border: #2e2e2c;
+  --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86; --accent: #3987e5; --warn: #e08a3c;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface-0); color: var(--text-primary);
+  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1080px; margin: 0 auto; padding: 32px 16px 64px; }
+.kicker { color: var(--text-muted); font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
+h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; font-weight: 600; }
+h1 { font-size: 34px; line-height: 1.2; margin: 6px 0 8px; letter-spacing: -.01em; }
+h2 { font-size: 21px; margin: 0 0 8px; }
+h3 { font-size: 17px; margin: 22px 0 6px; }
+p, li { color: var(--text-secondary); max-width: 780px; }
+a { color: var(--accent); }
+section { border-top: 1px solid var(--border); padding: 28px 0 4px; margin-top: 28px; }
+.eyebrow { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 4px; }
+code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th { text-align: left; font-size: 12.5px; color: var(--text-muted); font-weight: 600; padding: 8px; border-bottom: 1px solid var(--border); }
+td { padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sub { color: var(--text-muted); font-size: 12px; }
+.stats { display: flex; flex-wrap: wrap; gap: 28px; margin: 20px 0 4px; }
+.stat b { display: block; font: 600 30px Georgia, serif; color: var(--text-primary); }
+.stat span { color: var(--text-muted); font-size: 13px; }
+.insight { border-left: 3px solid var(--warn); background: var(--surface-1); padding: 10px 16px; margin: 16px 0; }
+.insight .eyebrow { color: var(--warn); }
+.insight p { margin: 4px 0; }
+.back { font-size: 13px; }
+.theme { position: absolute; top: 16px; right: 16px; font: inherit; font-size: 12px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+footer { color: var(--text-muted); font-size: 12px; margin-top: 28px; }
+@media (max-width: 760px) { h1 { font-size: 26px; } .kicker { padding-right: 72px; } .stat b { font-size: 24px; } }
+</style>
+</head>
+<body>
+<button class="theme" type="button" id="theme">Theme</button>
+<main>
+  <div class="kicker"><a class="back" href="../../index.html">All runs</a> · wallet-egress-lab · 2026-11-17</div>
+  <h1>WalletChan Egress Report</h1>
+  <p>Every network request the WalletChan browser extension (v4.2.0) made during a 20-minute Sepolia session, recorded behind a proxy and classified by who receives it and what it carries.</p>
+  <div class="insight"><div class="eyebrow">Draft, not reviewed</div><p>This page was generated with AI assistance from the run data and has not yet been reviewed by the author. Figures and wording may change.</p></div>
+  <div class="stats">
+    <div class="stat"><b>1,041</b><span>requests made by the wallet</span></div>
+    <div class="stat"><b>86%</b><span>carried a lab account address (891)</span></div>
+    <div class="stat"><b>20</b><span>operators received the address</span></div>
+  </div>
+
+  <section>
+    <div class="eyebrow">Main finding</div>
+    <h2>The open wallet sends the address to 19 default chain RPCs once a minute</h2>
+    <p>While the wallet UI is open, every 60 seconds it sends a balance multicall (<code>aggregate3</code> with <code>getEthBalance(address)</code>) to the default RPC of 19 of its 20 active chains, and the address to its own portfolio API at <code>walletchan.eth.sh</code>. In 90 seconds of idle, 80 requests went out and all of them carried the address, to 18 operators. A user with funds on one chain tells 17 RPC operators (dRPC, Binance, Alchemy, Arbitrum, OP Labs, Avalanche, MegaETH, Robinhood, Monad, Berachain, Hyperliquid, Linea, Ink, Plasma, Unichain, ZKsync, Abstract) that the address is active, from the same IP, once a minute. Tempo, the 20th active chain, was not queried in this run.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Findings</div>
+    <h2>What leaves the device</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>#</th><th>Data</th><th>Recipient</th><th>When</th><th>Change that keeps the feature</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Account address in a balance multicall</td><td>Default RPC of 19 chains, 17 operators</td><td>On open, then twice per 60 s while the UI is open</td><td>Query only chains the user enabled or holds funds on. Stagger per chain. Route over an anonymizing transport.</td></tr>
+        <tr><td>2</td><td>Account address</td><td><code>walletchan.eth.sh/api/portfolio</code>. The repo's server code forwards to Zerion, Alchemy and Dune Sim (source read, production not verified)</td><td>On open, every 60 s, and 6 times in 4 s after a send</td><td>No setting turns it off. Balance lookups are a fit for an anonymizing transport or private information retrieval (PIR).</td></tr>
+        <tr><td>3</td><td>All 5 addresses derived from the seed, within 0.2 s</td><td><code>walletchan.eth.sh</code>, dRPC, MegaETH</td><td>Seed import, on the address picker, before the user selects which to import</td><td>Look up only the addresses the user selects, or only through the user's RPC.</td></tr>
+        <tr><td>4</td><td>Hostname of the dapp</td><td><code>walletchan.eth.sh/api/domain-reputation</code></td><td>Every dapp connection prompt</td><td>Check a downloaded phishing list locally. The same server receives the address (finding 2) from the same IP.</td></tr>
+        <tr><td>5</td><td>Dapp origin URL</td><td>Google, <code>t1.gstatic.com/faviconV2</code></td><td>Connect and signature prompts</td><td>Use the browser's local favicon cache; the extension already holds the <code>favicon</code> permission.</td></tr>
+        <tr><td>6</td><td>Recipient address; every address in a typed-data message</td><td><code>eth.sh/api/labels</code></td><td>Review screen, before signing</td><td>Ship a label set with the extension, or look labels up after broadcast.</td></tr>
+        <tr><td>7</td><td>Taker address, token pair, amount</td><td><code>walletchan.eth.sh/api/swap/price</code> (0x upstream per server code)</td><td>Swap screen, on each change to the amount, before Review</td><td>Request indicative prices without the taker; add it at Review.</td></tr>
+        <tr><td>8</td><td>WalletConnect <code>INIT</code> telemetry event with a <code>did:key</code> client ID</td><td><code>pulse.walletconnect.org</code></td><td>At install, before any click, and at wallet creation</td><td>Turn off telemetry in the WalletConnect SDK initialisation.</td></tr>
+        <tr><td>9</td><td><code>Origin: chrome-extension://&lt;store id&gt;</code></td><td>Every RPC and API</td><td>Every extension request</td><td>Each RPC operator can tell the request comes from WalletChan. The extension holds <code>declarativeNetRequestWithHostAccess</code> and can remove the header.</td></tr>
+        <tr><td>10</td><td>Contract addresses of held tokens</td><td>CoinGecko, GeckoTerminal</td><td>Portfolio pricing (source read; not seen in this run, testnet tokens have no price)</td><td>Price through the user's RPC or a bundled list.</td></tr>
+      </tbody>
+    </table></div>
+    <h3>What stays local or on the user's RPC</h3>
+    <ul>
+      <li>With a custom Sepolia RPC set, the whole send (gas estimate, <code>eth_simulateV1</code>, <code>debug_traceCall</code>, broadcast, receipt) went to that RPC. No request went to the default Sepolia RPC after the change.</li>
+      <li>The Shield screen and the Private tab made no new requests with no deposits.</li>
+      <li>The last 2 minutes produced one request, an ETH price with no identifier. The wallet had most likely auto-locked (default 15 minutes).</li>
+      <li>No analytics SDK, install ID or client-ID header was found other than WalletConnect's.</li>
+      <li>The block-explorer enhancement (on by default) sent only the transaction hash, to the user's RPC.</li>
+    </ul>
+    <h3>Settings</h3>
+    <p>Onboarding shows no privacy choices. No setting turns off findings 1 to 9. Hiding chains reduces finding 1, and a custom RPC per chain moves finding 1 to the user's provider. Clear-signing descriptor lookups (contract address and selector, no user address) have a toggle, on by default.</p>
+    <h3>Privacy policy and observed traffic</h3>
+    <p>The policy (dated 2026-07-27) lists blockchain RPC endpoints, eth.sh (labels for contract addresses), Google Favicons and the Bankr API, and states that no analytics are collected. It does not list the <code>walletchan.eth.sh</code> portfolio, swap, domain-reputation and clear-signing endpoints, the WalletConnect telemetry, or CoinGecko. eth.sh received user counterparty addresses, not only contract addresses.</p>
+    <h3>Default Sepolia RPC</h3>
+    <p>The default Ethereum Sepolia RPC, <code>sepolia.drpc.org</code>, answers <code>400 chain is not available on free plan</code>. Sepolia balances stay empty until the user adds a custom RPC; this run used <code>ethereum-sepolia-rpc.publicnode.com</code>.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Numbers</div>
+    <h2>Requests by operator</h2>
+    <p>Unit: HTTP requests made by the wallet (extension origin, or WalletChan-only hosts without an Origin header). Excluded: 100 requests made by the dapp and explorer pages themselves, and 14 from the browser's own Google services.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Operator</th><th class=num>Requests</th><th class=num>With address</th></tr></thead>
+      <tbody><tr><td>dRPC</td><td class=num>186</td><td class=num>140</td></tr><tr><td>PublicNode (user-set RPC)</td><td class=num>89</td><td class=num>65</td></tr><tr><td>WalletChan</td><td class=num>58</td><td class=num>45</td></tr><tr><td>MegaETH</td><td class=num>54</td><td class=num>44</td></tr><tr><td>CoinGecko</td><td class=num>50</td><td class=num>0</td></tr><tr><td>Plasma</td><td class=num>39</td><td class=num>39</td></tr><tr><td>Hyperliquid</td><td class=num>39</td><td class=num>39</td></tr><tr><td>OP Labs</td><td class=num>39</td><td class=num>39</td></tr><tr><td>Avalanche</td><td class=num>39</td><td class=num>39</td></tr><tr><td>BNB Chain</td><td class=num>39</td><td class=num>39</td></tr><tr><td>Unichain</td><td class=num>39</td><td class=num>39</td></tr><tr><td>Arbitrum</td><td class=num>39</td><td class=num>39</td></tr><tr><td>ZKsync</td><td class=num>39</td><td class=num>39</td></tr><tr><td>Ink</td><td class=num>39</td><td class=num>39</td></tr><tr><td>Monad</td><td class=num>39</td><td class=num>39</td></tr><tr><td>Abstract</td><td class=num>39</td><td class=num>39</td></tr><tr><td>Berachain</td><td class=num>39</td><td class=num>39</td></tr><tr><td>Alchemy</td><td class=num>39</td><td class=num>39</td></tr><tr><td>Linea</td><td class=num>39</td><td class=num>39</td></tr><tr><td>Robinhood</td><td class=num>39</td><td class=num>39</td></tr><tr><td>eth.sh (WalletChan dev)</td><td class=num>12</td><td class=num>12</td></tr><tr><td>Google</td><td class=num>3</td><td class=num>0</td></tr><tr><td>WalletConnect (Reown)</td><td class=num>2</td><td class=num>0</td></tr><tr><td>local (IPFS probe)</td><td class=num>1</td><td class=num>0</td></tr><tr><td>eth.limo</td><td class=num>1</td><td class=num>0</td></tr></tbody>
+    </table></div>
+    <h3>By step</h3>
+    <div class="scroll"><table>
+      <thead><tr><th>Step</th><th class=num>Requests</th><th class=num>With address</th><th>Main recipients</th></tr></thead>
+      <tbody><tr><td>session start</td><td class=num>1</td><td class=num>0</td><td>WalletConnect (Reown) 1</td></tr><tr><td>import start</td><td class=num>9</td><td class=num>8</td><td>WalletChan 5, dRPC 3, MegaETH 1</td></tr><tr><td>open wallet</td><td class=num>44</td><td class=num>42</td><td>dRPC 8, MegaETH 3, WalletChan 2 <span class=sub>+16 more</span></td></tr><tr><td>idle home</td><td class=num>80</td><td class=num>80</td><td>dRPC 12, WalletChan 4, Avalanche 4 <span class=sub>+15 more</span></td></tr><tr><td>settings</td><td class=num>21</td><td class=num>20</td><td>dRPC 3, WalletChan 1, Avalanche 1 <span class=sub>+16 more</span></td></tr><tr><td>select sepolia</td><td class=num>73</td><td class=num>66</td><td>dRPC 21, WalletChan 3, Avalanche 3 <span class=sub>+16 more</span></td></tr><tr><td>custom rpc set</td><td class=num>45</td><td class=num>43</td><td>dRPC 6, PublicNode (user-set RPC) 4, WalletChan 2 <span class=sub>+17 more</span></td></tr><tr><td>receive eth</td><td class=num>42</td><td class=num>42</td><td>dRPC 6, WalletChan 2, Avalanche 2 <span class=sub>+16 more</span></td></tr><tr><td>receive token</td><td class=num>126</td><td class=num>126</td><td>dRPC 18, WalletChan 6, Avalanche 6 <span class=sub>+16 more</span></td></tr><tr><td>view assets</td><td class=num>153</td><td class=num>147</td><td>dRPC 24, PublicNode (user-set RPC) 10, WalletChan 7 <span class=sub>+16 more</span></td></tr><tr><td>send eth</td><td class=num>48</td><td class=num>37</td><td>dRPC 18, PublicNode (user-set RPC) 10, MegaETH 3 <span class=sub>+17 more</span></td></tr><tr><td>send review</td><td class=num>35</td><td class=num>26</td><td>PublicNode (user-set RPC) 31, WalletChan 2, eth.sh (WalletChan dev) 2</td></tr><tr><td>send confirm</td><td class=num>147</td><td class=num>136</td><td>dRPC 22, PublicNode (user-set RPC) 19, WalletChan 9 <span class=sub>+16 more</span></td></tr><tr><td>swap quote</td><td class=num>117</td><td class=num>65</td><td>CoinGecko 48, dRPC 10, WalletChan 8 <span class=sub>+17 more</span></td></tr><tr><td>shield open</td><td class=num>22</td><td class=num>22</td><td>dRPC 4, WalletChan 1, Avalanche 1 <span class=sub>+16 more</span></td></tr><tr><td>private tab</td><td class=num>21</td><td class=num>21</td><td>dRPC 3, WalletChan 1, Avalanche 1 <span class=sub>+16 more</span></td></tr><tr><td>dapp connect</td><td class=num>2</td><td class=num>0</td><td>WalletChan 2</td></tr><tr><td>dapp approve</td><td class=num>1</td><td class=num>0</td><td>dRPC 1</td></tr><tr><td>dapp sign</td><td class=num>1</td><td class=num>0</td><td>Google 1</td></tr><tr><td>dapp typed</td><td class=num>48</td><td class=num>10</td><td>dRPC 26, MegaETH 10, eth.sh (WalletChan dev) 10 <span class=sub>+1 more</span></td></tr><tr><td>ens browse</td><td class=num>2</td><td class=num>0</td><td>dRPC 1, eth.limo 1</td></tr><tr><td>explorer</td><td class=num>2</td><td class=num>0</td><td>PublicNode (user-set RPC) 2</td></tr><tr><td>idle end</td><td class=num>1</td><td class=num>0</td><td>CoinGecko 1</td></tr></tbody>
+    </table></div>
+    <p>Tiers: address-free 148, telemetry 2, address-linked read 863, intent before chain 28.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Method</div>
+    <h2>How this was recorded</h2>
+    <ul>
+      <li>Build: WalletChan v4.2.0, <code>walletchan-v4.2.0.zip</code> from the project's GitHub releases, SHA-256 <code>fb7ea57057e6333d915d25a1c3431acccf832fb77469785a39bfc72a820f6b55</code>. The Chrome Web Store build is also 4.2.0, built separately, with the same set of hosts in its code.</li>
+      <li>Capture: mitmproxy and Playwright Chromium, fresh profile, a recovery phrase generated for this lab, Sepolia ETH only.</li>
+      <li>Journey: install, import the phrase, open the wallet, idle 90 s, enable Sepolia, set a custom Sepolia RPC, receive ETH and WETH from an outside account, Activity and Positions, import WETH, send 0.001 ETH between two lab accounts, request a Base ETH-to-USDC swap quote (not executed), open Shield and the Private tab, connect to MetaMask's test dapp, <code>personal_sign</code>, <code>signTypedData_v4</code> (rejected), open <code>vitalik.eth</code>, open the transaction on Sepolia Etherscan, idle 2 min.</li>
+      <li>The steps were driven one at a time through the lab's control port, with a marker per step. There is no scripted driver for WalletChan yet, so this run cannot be repeated byte for byte.</li>
+      <li>A static read of the source (every endpoint, trigger and setting) was done alongside and cross-checked against the capture.</li>
+      <li>Not covered: swap and bridge execution, Shield deposit and withdrawal (mainnet only in the release build), Safe, Ledger, Bankr, WalletConnect sessions, long periods with the UI closed.</li>
+    </ul>
+    <h3>Checks</h3>
+    <ul>
+      <li>10 random address-linked requests: the address is present in all 10.</li>
+      <li>10 random address-free requests: none contains a lab address; the 40-hex values present are token and contract addresses.</li>
+      <li>Every host the source read lists for the steps run appears in the capture, except CoinGecko token pricing (testnet tokens) and the WalletConnect relay socket (no session opened).</li>
+      <li>The source read and the capture disagreed once: the source read concluded WalletConnect telemetry is off; the capture shows the telemetry event. This page follows the capture.</li>
+    </ul>
+    <p>Harness and analysis code: <a href="https://github.com/andyguzmaneth/wallet-egress-lab">https://github.com/andyguzmaneth/wallet-egress-lab</a> (<code>analysis/analyze_wc.py</code>, <code>analysis/report_wc.py</code>).</p>
+  </section>
+  <footer>Run 20261117T131301Z-wc-sepolia</footer>
+</main>
+<script>
+(function () {
+  var root = document.documentElement, btn = document.getElementById("theme");
+  try { var saved = localStorage.getItem("theme"); if (saved) root.setAttribute("data-theme", saved); } catch (e) {}
+  btn.addEventListener("click", function () {
+    var dark = root.getAttribute("data-theme") ? root.getAttribute("data-theme") === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    var next = dark ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("theme", next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>
