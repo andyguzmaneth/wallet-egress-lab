@@ -5,7 +5,7 @@ import { createPublicClient, createWalletClient, http, parseEther, formatEther }
 import { english, generateMnemonic, mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
 
-const PATH = "secrets/metamask.json";
+const PATH = process.env.MM_KEYS ?? "secrets/metamask.json";
 const RPC = process.env.SIGNER_RPC ?? "https://ethereum-sepolia-rpc.publicnode.com";
 if (!existsSync(PATH)) {
   const mnemonic = generateMnemonic(english);
